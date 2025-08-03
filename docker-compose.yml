@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  lagrange:
+    image: ghcr.io/lagrangedev/lagrange.onebot:sha-8ba45e4 # 使用官方的Docker镜像
+    container_name: mako_lagrange_client         # 给茉子的“传话筒”起个名字
+    restart: always            
+   # network_mode: host                 
+    volumes:
+      - ./lagrange_data:/app/data                # 把容器内的数据目录映射到本地，这样扫码信息和账号信息就不会丢失
+    environment:
+      LAGRANGE_QQ: 3900172910
+      LAGRANGE_PASSWORD: ""
+      LAGRANGE_PROTOCOL: Android
+      LAGRANGE_REVERSE_WS_URLS: '["ws://host.docker.internal:8080/onebot/v11/"]'
+      LAGRANGE_REVERSE_WS_HEADERS: '{"X-Self-ID": "3900172910"}'
