@@ -28,8 +28,9 @@ def fetch_juejin(limit=2):
         payload = {"client_type": 2608, "cursor": "0", "id_type": 2, "limit": 20, "sort_type": 200}
         rep = requests.post(url,json=payload,headers={"User-Agent":"Mozilla/5.0"})
         rep.raise_for_status()
-        data = rep.json("data",[])
-   
+        rep = rep.json()
+        data = rep.get("data",[])
+        
         articles = []
         for item in data:
             if item.get("item_type") == 2:#内容是文章不是广告
@@ -56,6 +57,7 @@ def fetch_tianxin(api_name,limit=2):
         rep.raise_for_status()
         
         data = rep.json()
+        data = data.get("result",{}).get("list",[])
         articles = []
 
         for item in data:
