@@ -51,13 +51,13 @@ def fetch_juejin(limit=2):
 
 def fetch_tianxin(api_name,limit=2):
     try:
-        url = f"http://api.tianapi.com/{api_name}/index"
-        params={"key":'96455cb0e4d72f63162dfce7448d67a4',"num":limit}
-        rep = requests.get(url,params=params)
+        url = f"https://api.tianapi.com/{api_name}/index"
+        payload={"key":'96455cb0e4d72f63162dfce7448d67a4',"num":limit}
+        rep = requests.post(url,data=payload)
         rep.raise_for_status()
         
         data = rep.json()
-        data = data.get("result",{}).get("list",[])
+        data = data.get("newslist",[])
         articles = []
 
         for item in data:
@@ -73,7 +73,7 @@ def fetch_tianxin(api_name,limit=2):
         return []
    
 
-@scheduler.scheduled_job("cron", hour=7, minute=30)
+@scheduler.scheduled_job("cron", hour=10, minute=0)
 async def send_daily_digest():
     try:
         bot = get_bot()
