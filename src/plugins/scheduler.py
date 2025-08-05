@@ -3,7 +3,7 @@ import random
 import requests
 from nonebot_plugin_apscheduler import scheduler
 
-@scheduler.scheduled_job("cron", hour=10, minute=25)
+@scheduler.scheduled_job("cron", hour=7, minute=0)
 async def good_morning_mako():
     try:
 
@@ -73,7 +73,7 @@ def fetch_tianxin(api_name,limit=2):
         return []
    
 
-@scheduler.scheduled_job("cron", hour=10, minute=25)
+@scheduler.scheduled_job("cron", hour=7, minute=10)
 async def send_daily_digest():
     try:
         bot = get_bot()
@@ -107,6 +107,46 @@ async def send_daily_digest():
 
         message = "\n".join(msg)
         await bot.send_group_msg(group_id=group_id, message=message)
+
+    except Exception as e:
+       print(f"未成功发送精选文章：{e}") 
+
+from nonebot import on_command
+from nonebot.matcher import Matcher 
+
+daily_news_matcher = on_command("精选文章", aliases={"news","今日新闻", "日报"}, priority=5, block=True)
+@daily_news_matcher.handle()
+async def _(matcher:Matcher):
+    await matcher.send("茉子正在努力搜集最新的资讯，请稍等片刻哦...")
+    try:
+        tech_news = fetch_juejin(limit=2)
+        game_news = fetch_tianxin(api_name='game',limit=2)
+        anime_news = fetch_tianxin(api_name='dongman',limit=2)
+        social_news = fetch_tianxin(api_name='social',limit=2)
+
+        msg = ["---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦，快来看看茉子发现了什么好东西！\n"]
+
+        def format_section(title, news):
+            line = [f"\n{title}"]
+            if news:
+                for i, item in enumerate(news):
+                    line.append(f"({i+1}) 吶吶，这篇《{item['title']}》看起来很有趣！")
+                    line.append(f"    茉子点评：{item['description']}") 
+                    line.append(f"    传送门→ {item['url']}") 
+            else:
+                line.append("    欸~？这个板块今天居然是空空如也啊，茉子也没找到好玩的…… ( ´･ω･)")
+            return line
+
+        msg.extend(format_section("🚀 首先是技术力超高的科技前沿！", tech_news))
+        msg.extend(format_section("🎮 GOGO！游戏玩家的专属情报！", game_news))
+        msg.extend(format_section("🌸 二次元浓度补充！今日新番和趣闻~", anime_news))
+        msg.extend(format_section("📰 最后也稍微关心一下现实世界吧！", social_news))
+
+        msg.append("\n\n好啦，今天的分享就到这里！茉子下线啦，拜拜~ (｡･ω･｡)ﾉ♡")
+        msg.append("---")
+
+        message = "\n".join(msg)
+        await matcher.send(message)
 
     except Exception as e:
        print(f"未成功发送精选文章：{e}") 
