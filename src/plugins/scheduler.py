@@ -85,11 +85,11 @@ async def send_daily_digest():
         anime_news = fetch_tianxin(api_name='dongman',limit=10)
         social_news = fetch_tianxin(api_name='social',limit=10)
 
-        msg = ["---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦，快来看看茉子发现了什么好东西！\n"]
+        message = Message()
+        message.append("---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦！\n")
 
-        
         def format_section(title: str, news: list) -> MessageSegment:
-                segment = MessageSegment.text(f"\n{title}\n") # 板块标题
+                segment = MessageSegment.text(f"\n{title}\n")
                 if not news:
                     segment += MessageSegment.text("    欸~？这个板块今天居然是空空如也啊…… ( ´･ω･)\n")
                 else:
@@ -99,15 +99,15 @@ async def send_daily_digest():
                         segment += MessageSegment.text(f"{item['url']}\n")
                 return segment
 
-        msg.extend(format_section("🚀 首先是技术力超高的科技前沿！", tech_news))
-        msg.extend(format_section("🎮 GOGO！游戏玩家的专属情报！", game_news))
-        msg.extend(format_section("🌸 二次元浓度补充！今日新番和趣闻~", anime_news))
-        msg.extend(format_section("📰 最后也稍微关心一下现实世界吧！", social_news))
+        message.extend(format_section("🚀 首先是技术力超高的科技前沿！", tech_news))
+        message.extend(format_section("🎮 GOGO！游戏玩家的专属情报！", game_news))
+        message.extend(format_section("🌸 二次元浓度补充！今日新番和趣闻~", anime_news))
+        message.extend(format_section("📰 最后也稍微关心一下现实世界吧！", social_news))
 
-        msg.append("\n\n好啦，今天的分享就到这里！茉子下线啦，拜拜~ (｡･ω･｡)ﾉ♡")
-        msg.append("---")
+        message.append("\n\n好啦，今天的分享就到这里！茉子下线啦，拜拜~ (｡･ω･｡)ﾉ♡")
+        message.append("---")
 
-        message = "\n".join(msg)
+        #message = "\n".join(msg)
         await bot.send_group_msg(group_id=group_id, message=message)
 
     except Exception as e:
@@ -126,29 +126,28 @@ async def _(matcher:Matcher):
         anime_news = fetch_tianxin(api_name='dongman',limit=10)
         social_news = fetch_tianxin(api_name='social',limit=10)
 
-        msg = ["---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦，快来看看茉子发现了什么好东西！\n"]
+        message = Message()
+        message.append("---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦！\n")
 
         def format_section(title: str, news: list) -> MessageSegment:
-            segment = MessageSegment.text(f"\n{title}\n") 
-            if not news:
-                segment += MessageSegment.text("    欸~？这个板块今天居然是空空如也啊…… ( ´･ω･)\n")
-            else:
-                for item in news:
-                    segment += MessageSegment.text(f"({news.index(item)+1}) 这篇《{item['title']}》看起来很有趣！\n")
-                    segment += MessageSegment.text(f"    茉子点评：{item['description']}\n")
-                
-                    segment += MessageSegment.text(f"{item['url']}\n")
-            return segment
+                segment = MessageSegment.text(f"\n{title}\n")
+                if not news:
+                    segment += MessageSegment.text("    欸~？这个板块今天居然是空空如也啊…… ( ´･ω･)\n")
+                else:
+                    for item in news:
+                        segment += MessageSegment.text(f"({news.index(item)+1}) 这篇《{item['title']}》看起来很有趣！\n")
+                        segment += MessageSegment.text(f"    茉子点评：{item['description']}\n")
+                        segment += MessageSegment.text(f"{item['url']}\n")
+                return segment
 
-        msg.extend(format_section("🚀 首先是技术力超高的科技前沿！", tech_news))
-        msg.extend(format_section("🎮 GOGO！游戏玩家的专属情报！", game_news))
-        msg.extend(format_section("🌸 二次元浓度补充！今日新番和趣闻~", anime_news))
-        msg.extend(format_section("📰 最后也稍微关心一下现实世界吧！", social_news))
+        message.extend(format_section("🚀 首先是技术力超高的科技前沿！", tech_news))
+        message.extend(format_section("🎮 GOGO！游戏玩家的专属情报！", game_news))
+        message.extend(format_section("🌸 二次元浓度补充！今日新番和趣闻~", anime_news))
+        message.extend(format_section("📰 最后也稍微关心一下现实世界吧！", social_news))
 
-        msg.append("\n\n好啦，今天的分享就到这里！茉子下线啦，拜拜~ (｡･ω･｡)ﾉ♡")
-        msg.append("---")
+        message.append("\n\n好啦，今天的分享就到这里！茉子下线啦，拜拜~ (｡･ω･｡)ﾉ♡")
+        message.append("---")
 
-        message = "\n".join(msg)
         await matcher.send(message)
 
     except Exception as e:
