@@ -128,14 +128,14 @@ async def _(matcher:Matcher):
 
         msg = ["---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦，快来看看茉子发现了什么好东西！\n"]
 
-        def format_section_to_msg(title: str, news: list) -> MessageSegment:
+        def format_section(title: str, news: list) -> MessageSegment:
             segment = MessageSegment.text(f"\n{title}\n") 
             if not news:
                 segment += MessageSegment.text("    欸~？这个板块今天居然是空空如也啊…… ( ´･ω･)\n")
             else:
                 for item in news:
                     segment += MessageSegment.text(f"({news.index(item)+1}) 这篇《{item['title']}》看起来很有趣！\n")
-                    segment += Message_text(f"    茉子点评：{item['description']}\n")
+                    segment += MessageSegment.text(f"    茉子点评：{item['description']}\n")
                 
                     segment += MessageSegment.text(f"{item['url']}\n")
             return segment
@@ -154,7 +154,7 @@ async def _(matcher:Matcher):
     except Exception as e:
        print(f"未成功发送精选文章：{e}") 
 
-# 临时测试用的，可以加在文件末尾
+
 from nonebot import on_command
 from nonebot.matcher import Matcher
 
