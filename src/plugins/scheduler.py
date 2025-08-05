@@ -157,10 +157,8 @@ async def _(matcher:Matcher):
 from nonebot import on_command
 from nonebot.matcher import Matcher
 
-@on_command("testlink").handle()
+@on_command("bilibili").handle()
 async def _(matcher: Matcher):
-    # 使用一个绝对不会错的、干净的URL
     url = "https://www.bilibili.com/"
-    # 用我们认为最正确的方式发送
-    await matcher.send(f"这是一个最简单的测试：\n{url}")
+    await matcher.send(f"这是b站：\n{url}")
    
