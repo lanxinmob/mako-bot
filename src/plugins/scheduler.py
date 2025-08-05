@@ -58,15 +58,14 @@ def fetch_tianxin(api_name,limit=2):
         
         data = rep.json()
         data = data.get("newslist",[])
-        data = random.choice(data)
+        item = random.choice(data)
         articles = []
 
-        for item in data:
-            articles.append({
-                "title":item.get("title","N/A"),
-                "description":item.get("description","N/A"),
-                "url":item.get("url","#")
-            })
+        articles.append({
+            "title":item.get("title","N/A"),
+            "description":item.get("description","N/A"),
+            "url":item.get("url","#")
+        })
         return articles
 
     except Exception as e:
