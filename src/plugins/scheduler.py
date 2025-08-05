@@ -94,7 +94,7 @@ async def send_daily_digest():
                     line.append(f"茉子点评：{item['description']}") 
                     line.append(f"传送门→") 
                     line.append(f"") 
-                    line.append(f"{item['url']}") 
+                    line.append(item['url']) 
             else:
                 line.append("    欸~？这个板块今天居然是空空如也啊，茉子也没找到好玩的…… ( ´･ω･)")
             return line
@@ -136,7 +136,7 @@ async def _(matcher:Matcher):
                     line.append(f"茉子点评：{item['description']}") 
                     line.append(f"传送门→") 
                     line.append(f"") 
-                    line.append(f"{item['url']}") 
+                    line.append(item['url']) 
             else:
                 line.append("    欸~？这个板块今天居然是空空如也啊，茉子也没找到好玩的…… ( ´･ω･)")
             return line
