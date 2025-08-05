@@ -30,19 +30,19 @@ game_news = fetch_tianxin(api_name='game',limit=10)
 anime_news = fetch_tianxin(api_name='dongman',limit=10)
 social_news = fetch_tianxin(api_name='social',limit=10)
 
-
-def format_section(title, news):
-    line = [f"\n{title}"]
-    if news:
-        for i, item in enumerate(news):
-            line.append(f"({i+1}) 这篇《{item['title']}》看起来很有趣！")
-            line.append(f"茉子点评：{item['description']}") 
-            line.append(f"传送门→") 
-            line.append(f"") 
-            line.append(item['url']) 
-    else:
-        line.append("    欸~？这个板块今天居然是空空如也啊，茉子也没找到好玩的…… ( ´･ω･)")
-    return line
+from nonebot.adapters.onebot.v11 import Message, MessageSegment
+def format_section(title: str, news: list) -> MessageSegment:
+        segment = MessageSegment.text(f"\n{title}\n") # 板块标题
+        if not news:
+            segment += MessageSegment.text("    欸~？这个板块今天居然是空空如也啊…… ( ´･ω･)\n")
+        else:
+            for item in news:
+                # 把标题、点评、URL都作为独立的纯文本段添加
+                segment += MessageSegment.text(f"({news.index(item)+1}) 这篇《{item['title']}》看起来很有趣！\n")
+                segment += MessageSegment.text(f"    茉子点评：{item['description']}\n")
+                # 【最关键】URL自己单独作为一段纯文本，最大程度保证可点击
+                segment += MessageSegment.text(f"{item['url']}\n")
+        return segment
 
 msg = format_section("📰 最后也稍微关心一下现实世界吧！", social_news)
 

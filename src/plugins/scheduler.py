@@ -2,6 +2,7 @@ from nonebot import get_bot
 import random
 import requests
 from nonebot_plugin_apscheduler import scheduler
+from nonebot.adapters.onebot.v11 import Message, MessageSegment
 
 @scheduler.scheduled_job("cron", hour=7, minute=0)
 async def good_morning_mako():
@@ -86,17 +87,17 @@ async def send_daily_digest():
 
         msg = ["---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦，快来看看茉子发现了什么好东西！\n"]
 
-        def format_section(title, news):
-            line = [f"\n{title}"]
-            if news:
-                for i, item in enumerate(news):
-                    line.append(f"({i+1}) 这篇《{item['title']}》看起来很有趣！")
-                    line.append(f"茉子点评：{item['description']}") 
-                    line.append(f"传送门→") 
-                    line.append(item['url']) 
-            else:
-                line.append("    欸~？这个板块今天居然是空空如也啊，茉子也没找到好玩的…… ( ´･ω･)")
-            return line
+        
+        def format_section(title: str, news: list) -> MessageSegment:
+                segment = MessageSegment.text(f"\n{title}\n") # 板块标题
+                if not news:
+                    segment += MessageSegment.text("    欸~？这个板块今天居然是空空如也啊…… ( ´･ω･)\n")
+                else:
+                    for item in news:
+                        segment += MessageSegment.text(f"({news.index(item)+1}) 这篇《{item['title']}》看起来很有趣！\n")
+                        segment += MessageSegment.text(f"    茉子点评：{item['description']}\n")
+                        segment += MessageSegment.text(f"{item['url']}\n")
+                return segment
 
         msg.extend(format_section("🚀 首先是技术力超高的科技前沿！", tech_news))
         msg.extend(format_section("🎮 GOGO！游戏玩家的专属情报！", game_news))
