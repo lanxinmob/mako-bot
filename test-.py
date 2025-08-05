@@ -46,4 +46,4 @@ def format_section(title, news):
 
 msg = format_section("📰 最后也稍微关心一下现实世界吧！", social_news)
 
-print(msg)
+print(repr(msg))
