@@ -73,7 +73,7 @@ def fetch_tianxin(api_name,limit=2):
         return []
    
 
-@scheduler.scheduled_job("cron", hour=10, minute=0)
+@scheduler.scheduled_job("cron", hour=10, minute=10)
 async def send_daily_digest():
     try:
         bot = get_bot()
