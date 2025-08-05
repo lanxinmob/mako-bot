@@ -58,6 +58,7 @@ def fetch_tianxin(api_name,limit=2):
         
         data = rep.json()
         data = data.get("newslist",[])
+        data = random.choice(data)
         articles = []
 
         for item in data:
@@ -80,9 +81,9 @@ async def send_daily_digest():
         group_id = 984928242
 
         tech_news = fetch_juejin(limit=2)
-        game_news = fetch_tianxin(api_name='game',limit=2)
-        anime_news = fetch_tianxin(api_name='dongman',limit=2)
-        social_news = fetch_tianxin(api_name='social',limit=2)
+        game_news = fetch_tianxin(api_name='game',limit=10)
+        anime_news = fetch_tianxin(api_name='dongman',limit=10)
+        social_news = fetch_tianxin(api_name='social',limit=10)
 
         msg = ["---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦，快来看看茉子发现了什么好东西！\n"]
 
@@ -90,9 +91,10 @@ async def send_daily_digest():
             line = [f"\n{title}"]
             if news:
                 for i, item in enumerate(news):
-                    line.append(f"({i+1}) 吶吶，这篇《{item['title']}》看起来很有趣！")
-                    line.append(f"    茉子点评：{item['description']}") 
-                    line.append(f"    传送门→ {item['url']}") 
+                    line.append(f"({i+1}) 这篇《{item['title']}》看起来很有趣！")
+                    line.append(f"茉子点评：{item['description']}") 
+                    line.append(f"传送门→") 
+                    line.append(f"{item['url']}") 
             else:
                 line.append("    欸~？这个板块今天居然是空空如也啊，茉子也没找到好玩的…… ( ´･ω･)")
             return line
@@ -120,9 +122,9 @@ async def _(matcher:Matcher):
     await matcher.send("茉子正在努力搜集最新的资讯，请稍等片刻哦...")
     try:
         tech_news = fetch_juejin(limit=2)
-        game_news = fetch_tianxin(api_name='game',limit=2)
-        anime_news = fetch_tianxin(api_name='dongman',limit=2)
-        social_news = fetch_tianxin(api_name='social',limit=2)
+        game_news = fetch_tianxin(api_name='game',limit=10)
+        anime_news = fetch_tianxin(api_name='dongman',limit=10)
+        social_news = fetch_tianxin(api_name='social',limit=10)
 
         msg = ["---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦，快来看看茉子发现了什么好东西！\n"]
 
@@ -130,9 +132,10 @@ async def _(matcher:Matcher):
             line = [f"\n{title}"]
             if news:
                 for i, item in enumerate(news):
-                    line.append(f"({i+1}) 吶吶，这篇《{item['title']}》看起来很有趣！")
-                    line.append(f"    茉子点评：{item['description']}") 
-                    line.append(f"    传送门→ {item['url']}") 
+                    line.append(f"({i+1}) 这篇《{item['title']}》看起来很有趣！")
+                    line.append(f"茉子点评：{item['description']}") 
+                    line.append(f"传送门→") 
+                    line.append(f"{item['url']}") 
             else:
                 line.append("    欸~？这个板块今天居然是空空如也啊，茉子也没找到好玩的…… ( ´･ω･)")
             return line
