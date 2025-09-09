@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   lagrange:
-    image: ghcr.io/lagrangedev/lagrange.onebot:sha-8ba45e4 
+    image: ghcr.io/lagrangedev/lagrange.onebot:sha-8ba45e4 ~
     container_name: mako_lagrange_client        
     restart: always            
    # network_mode: host                 
