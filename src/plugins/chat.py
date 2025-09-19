@@ -103,7 +103,7 @@ async def parse_reminder_intent(user_text: str, now: datetime):
     try:
         response = await asyncio.wait_for(
                 client.chat.completions.create(
-                    model="deepseek-reasoner", 
+                    model="deepseek-chat", 
                     messages=[
                         {"role": "user", "content": prompt}
                     ],
