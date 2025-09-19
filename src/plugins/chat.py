@@ -103,12 +103,12 @@ async def parse_reminder_intent(user_text: str, now: datetime):
     try:
         response = await asyncio.wait_for(
                 client.chat.completions.create(
-                    model="deepseek-chat", 
+                    model="deepseek-reasoner", 
                     messages=[
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1, # 对于需要精确JSON输出的任务，低温更稳定
-                    max_tokens=500   # 限制输出长度，节省资源
+                    max_tokens=1000   # 限制输出长度，节省资源
                 ),
                 timeout=10.0
             )
