@@ -21,9 +21,7 @@ async def handle_get_weather(city: str = ArgPlainText()):
         await weather_handler.reject("呜...城市名称不能为空哦，请重新告诉我吧！")
 
     try:
-        print(f"API Host: {os.getenv('your_api_host')}") 
-        print(f"API Key: {os.getenv('your_api')}")
-        
+
         url = f"https://{os.getenv('your_api_host')}/geo/v2/city/lookup?location={city}&key={os.getenv('your_api')}"
         #headers = {f"Authorization: Bearer {os.getenv("your_token")}"}
         async with httpx.AsyncClient() as client:
@@ -49,8 +47,8 @@ async def handle_get_weather(city: str = ArgPlainText()):
             return
         
         now = data["now"]
-        country = data_place["location"]["country"]
-        area = data_place["location"]["name"]
+        country = data_place["location"][0]["country"]
+        area = data_place["location"][0]["name"]
         icon_code = (now['icon'])
         icon_path = os.path.join("/root/mako-bot/WeatherIcon/weather-icon-S1/color-128", f"{icon_code}.png")
         reply_1 = (
