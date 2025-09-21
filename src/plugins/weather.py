@@ -4,8 +4,8 @@ from nonebot.matcher import Matcher
 from nonebot.params import ArgPlainText
 from nonebot.exception import FinishedException
 from nonebot.params import ArgPlainText, CommandArg
-from nonebot.adapters.onebot.v11 import Message
-
+from nonebot.adapters.onebot.v11 import Message,MessageSegment
+import os
 weather_handler = on_command("天气", aliases={"weather"},priority=10,block=True)
 
 @weather_handler.handle()
@@ -21,29 +21,55 @@ async def handle_get_weather(city: str = ArgPlainText()):
         await weather_handler.reject("呜...城市名称不能为空哦，请重新告诉我吧！")
 
     try:
-        url = f"https://wttr.in/{city}?format=j1"
+        url = f"https://{os.getenv("your_api_host")}/geo/v2/city/lookup?location={city}&key={os.getenv("your_api")}"
+        #headers = {f"Authorization: Bearer {os.getenv("your_token")}"}
         async with httpx.AsyncClient() as client:
             resp = await client.get(url)
-            resp.raise_for_status() #
-            data = resp.json()
+            resp.raise_for_status() 
+            data_place = resp.json()
 
-        current = data['current_condition'][0]
-        area = data['nearest_area'][0]['areaName'][0]['value']
-        country = data['nearest_area'][0]['country'][0]['value']
+        if data_place["code"]!=200:
+            await weather_handler.finish(f"哎呀，茉子找不到叫 '{city}' 的地方... 你是不是写错啦？") 
+            return 
         
-        reply = (
-            f"哼哼~ 茉子大人掐指一算，{area}, {country} 今天的天气是：\n"
-            f"天气状况：{current['weatherDesc'][0]['value']}\n"
-            f"气温：{current['temp_C']}°C (体感 {current['FeelsLikeC']}°C)\n"
-            f"风向：{current['winddir16Point']} 风速：{current['windspeedKmph']} km/h\n"
-            f"湿度：{current['humidity']}%"
+        location_id = data_place["location"][0]["id"]
+
+        url = f"https://{os.getenv("your_api_host")}/v7/weather/now?location={location_id}&key={os.getenv("your_api")}"
+        #headers = {f"Authorization: Bearer {os.getenv("your_token")}"}
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url)
+            resp.raise_for_status() 
+            data = resp.json()
+        
+        if data["code"]!=200:
+            await weather_handler.finish("呜呜，天气服务器好像罢工了，茉子也查不到啦~")
+            return
+        
+        now = data["now"]
+        country = data_place["location"]["country"]
+        area = data_place["location"]["name"]
+        icon_code = (now['icon'])
+        icon_path = os.path.join("/root/mako-bot/WeatherIcon/weather-icon-S1/color-128", f"{icon_code}.png")
+        reply_1 = (
+            f"哼哼~ 茉子大人掐指一算，{country}{area} 现在的天气是：\n"     
+        )
+        reply_2 = (
+            f"天气状况：{now['text']}\n"
+            f"气温：{now['temp']}°C (体感 {now['feelsLike']}°C)\n"
+            f"风向：{now['windDir']} 风速：{now['windSpeed']} km/h\n"
+            f"湿度：{now['humidity']}%"
+        )
+        reply = Message(
+            MessageSegment.text(reply_1)+
+            MessageSegment.image(file=icon_path) +
+            MessageSegment.text(reply_2)
         )
         await weather_handler.finish(Message(reply)) 
 
     except httpx.HTTPStatusError:
         await weather_handler.finish(f"哎呀，茉子找不到叫 '{city}' 的地方... 你是不是写错啦？")
     except FinishedException:
-        await weather_handler.finish("ヽ(✿ﾟ▽ﾟ)ノ好耶，查询完毕了~")
+        await weather_handler.finish("(●ˇ∀ˇ●)嘿嘿，查询完毕了~")
     except Exception as e:
         print(f"查询天气时发生错误: {e}")
         await weather_handler.finish("呜呜，天气服务器好像罢工了，茉子也查不到啦~")
