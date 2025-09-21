@@ -24,7 +24,7 @@ async def handle_get_weather(city: str = ArgPlainText()):
         print(f"API Host: {os.getenv('your_api_host')}") 
         print(f"API Key: {os.getenv('your_api')}")
         
-        url = f"https://{os.getenv("your_api_host")}/geo/v2/city/lookup?location={city}&key={os.getenv("your_api")}"
+        url = f"https://{os.getenv('your_api_host')}/geo/v2/city/lookup?location={city}&key={os.getenv('your_api')}"
         #headers = {f"Authorization: Bearer {os.getenv("your_token")}"}
         async with httpx.AsyncClient() as client:
             resp = await client.get(url)
@@ -37,7 +37,7 @@ async def handle_get_weather(city: str = ArgPlainText()):
         
         location_id = data_place["location"][0]["id"]
 
-        url = f"https://{os.getenv("your_api_host")}/v7/weather/now?location={location_id}&key={os.getenv("your_api")}"
+        url = f"https://{os.getenv('your_api_host')}/v7/weather/now?location={location_id}&key={os.getenv('your_api')}"
         #headers = {f"Authorization: Bearer {os.getenv("your_token")}"}
         async with httpx.AsyncClient() as client:
             resp = await client.get(url)
