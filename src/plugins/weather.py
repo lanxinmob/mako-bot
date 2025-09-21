@@ -42,6 +42,8 @@ async def handle_get_weather(city: str = ArgPlainText()):
 
     except httpx.HTTPStatusError:
         await weather_handler.finish(f"哎呀，茉子找不到叫 '{city}' 的地方... 你是不是写错啦？")
+    except FinishedException:
+        await weather_handler.finish("ヽ(✿ﾟ▽ﾟ)ノ好耶，查询完毕了~")
     except Exception as e:
         print(f"查询天气时发生错误: {e}")
         await weather_handler.finish("呜呜，天气服务器好像罢工了，茉子也查不到啦~")
