@@ -21,6 +21,9 @@ async def handle_get_weather(city: str = ArgPlainText()):
         await weather_handler.reject("呜...城市名称不能为空哦，请重新告诉我吧！")
 
     try:
+        print(f"API Host: {os.getenv('your_api_host')}") 
+        print(f"API Key: {os.getenv('your_api')}")
+        
         url = f"https://{os.getenv("your_api_host")}/geo/v2/city/lookup?location={city}&key={os.getenv("your_api")}"
         #headers = {f"Authorization: Bearer {os.getenv("your_token")}"}
         async with httpx.AsyncClient() as client:
@@ -28,7 +31,7 @@ async def handle_get_weather(city: str = ArgPlainText()):
             resp.raise_for_status() 
             data_place = resp.json()
 
-        if data_place["code"]!=200:
+        if data_place["code"]!="200":
             await weather_handler.finish(f"哎呀，茉子找不到叫 '{city}' 的地方... 你是不是写错啦？") 
             return 
         
@@ -41,7 +44,7 @@ async def handle_get_weather(city: str = ArgPlainText()):
             resp.raise_for_status() 
             data = resp.json()
         
-        if data["code"]!=200:
+        if data["code"]!="200":
             await weather_handler.finish("呜呜，天气服务器好像罢工了，茉子也查不到啦~")
             return
         
@@ -59,6 +62,11 @@ async def handle_get_weather(city: str = ArgPlainText()):
             f"风向：{now['windDir']} 风速：{now['windSpeed']} km/h\n"
             f"湿度：{now['humidity']}%"
         )
+        if not os.path.exists(icon_path):
+            print(f"Warning: Icon file not found at {icon_path}")
+            await weather_handler.finish(Message(MessageSegment.text(reply_1 + reply_2)))
+            return
+        
         reply = Message(
             MessageSegment.text(reply_1)+
             MessageSegment.image(file=icon_path) +
