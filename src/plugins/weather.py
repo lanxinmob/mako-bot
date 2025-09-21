@@ -6,7 +6,7 @@ from nonebot.params import ArgPlainText
 from nonebot.params import ArgPlainText, CommandArg
 from nonebot.adapters.onebot.v11 import Message
 
-weather_handler = on_command("天气", aliases={"weather"})
+weather_handler = on_command("天气", aliases={"weather"},priority=90,block=True)
 
 @weather_handler.handle()
 async def handle_first_receive(matcher: Matcher, args: Message = CommandArg()):
