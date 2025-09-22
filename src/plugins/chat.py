@@ -13,6 +13,8 @@ import json
 import redis
 from datetime import datetime
 from dotenv import load_dotenv
+from nonebot_plugin_alconna.uniseg import UniMessage
+
 load_dotenv()
 
 import hashlib
@@ -374,10 +376,10 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
                     segments.append(MessageSegment.text(reply_content[pos]))
                     pos += 1
 
-            final_message = Message(segments)
-            await matcher.send(final_message)
+            final_message = UniMessage(segments)
+            await final_message.send(reply_to=True)
         else:
-            await matcher.send(Message(reply_text))
+            await UniMessage(reply_text).send(reply_to=True)
 
         new_history = messages_for_api[1:] 
         new_history.append({"role": "assistant", "content": reply_text})
