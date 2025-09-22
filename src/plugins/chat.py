@@ -14,6 +14,7 @@ import redis
 from datetime import datetime
 from dotenv import load_dotenv
 from nonebot_plugin_alconna.uniseg import UniMessage
+from nonebot_plugin_alconna.uniseg import get_message_id
 
 load_dotenv()
 
@@ -156,7 +157,8 @@ async def send_group_reminder(group_id: int, session_id: str, job_id: str, msg: 
 async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
     #sender_nickname = event.sender.card or event.sender.nickname 
     raw_message = event.get_message()
-    
+    msg_id: str = get_message_id(event, bot)
+
     processed_message_text = ""
     if isinstance(event, GroupMessageEvent):
         for seg in raw_message:
@@ -377,10 +379,9 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
                     pos += 1
 
             final_message = UniMessage(segments)
-            await final_message.send(reply_to=True)
+            await final_message.send(msg_id=msg_id)
         else:
-            message = UniMessage.text(reply_text)
-            await message.send(reply_to=True)
+            await matcher.send(reply_text)
 
         new_history = messages_for_api[1:] 
         new_history.append({"role": "assistant", "content": reply_text})
