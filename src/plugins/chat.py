@@ -14,6 +14,7 @@ import redis
 from datetime import datetime
 from dotenv import load_dotenv
 from nonebot_plugin_alconna.uniseg import UniMessage
+from nonebot_plugin_alconna.uniseg import get_message_id
 
 load_dotenv()
 
@@ -156,6 +157,7 @@ async def send_group_reminder(group_id: int, session_id: str, job_id: str, msg: 
 async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
     #sender_nickname = event.sender.card or event.sender.nickname 
     raw_message = event.get_message()
+    msg_id = get_message_id(event, bot)
 
     processed_message_text = ""
     if isinstance(event, GroupMessageEvent):
