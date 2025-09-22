@@ -14,7 +14,6 @@ import redis
 from datetime import datetime
 from dotenv import load_dotenv
 from nonebot_plugin_alconna.uniseg import UniMessage
-from nonebot_plugin_alconna.uniseg import get_message_id
 
 load_dotenv()
 
