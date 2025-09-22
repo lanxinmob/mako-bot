@@ -378,8 +378,8 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
                     segments.append(MessageSegment.text(reply_content[pos]))
                     pos += 1
 
-            final_message = UniMessage(segments)
-            await final_message.send(msg_id=msg_id)
+            final_message = Message(segments)
+            await matcher.send(final_message)
         else:
             await matcher.send(Message(reply_text))
 
