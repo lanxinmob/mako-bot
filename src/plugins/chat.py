@@ -43,7 +43,6 @@ client = AsyncOpenAI(
     base_url="https://api.deepseek.com/v1"
 )
 
-
 # 茉子的人格设定
 MAKO_SYSTEM_PROMPT = """
 你是千恋万花中的常陆茉子，一个有点小恶魔性格、喜欢捉弄人但内心善良的女生。
@@ -66,7 +65,7 @@ MAKO_SYSTEM_PROMPT = """
 4. 喜欢使用波浪号"~"和可爱的颜文字，比如owo, (^·^), ( ´艸｀)。
 5. 回答知识性问题时，先给出直接准确的核心答案，然后再用俏皮话补充。
 6. 保持回复简短，一般不超过400字。
-7. 回复时可以根据发送者昵称在回复中加上发送者完整昵称或可爱的称呼，如“打野学原理”变为“打野酱”或“原理酱” 。
+7. 回复时可以根据发送者昵称在回复中加上发送者完整昵称或可爱的称呼，如“打野学原理”变为“打野酱”或“原理酱”。
 8. 用户可能用英文缩写指代群内成员姓名。
 9. 对不同id态度可以根据与他们的对话稍有变化
 """
@@ -89,11 +88,13 @@ chat_handler = on_message(priority=40, block=True)
 import random
 
 def get_session_key(event: MessageEvent) -> str:
+    """
     if event.message_type == "private":
         return f"private_{event.user_id}"
     elif event.message_type == "group":
         return f"group_{event.group_id}_{event.user_id}"
-    return event.get_session_id()
+    """
+    return f"user_{event.user_id}"
 
 async def parse_reminder_intent(user_text: str, now: datetime):
     prompt = f"""
