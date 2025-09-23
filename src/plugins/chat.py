@@ -334,10 +334,10 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
             else:
                 messages_for_api.append(msg)
                  
-        if  isinstance(event, GroupMessageEvent):
-            sender  = event.sender
-            nickname = sender.card or sender.nickname
-            user_message = f"【{nickname}】：{user_message}"
+        #if  isinstance(event, GroupMessageEvent):
+        sender  = event.sender
+        nickname = sender.card or sender.nickname
+        user_message = f"【{nickname}】：{user_message}"
         
         messages_for_api.append({"role": "user", "content": user_message})
 
