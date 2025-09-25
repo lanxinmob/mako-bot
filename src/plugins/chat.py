@@ -189,10 +189,11 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
     intent = intent_data.get("intent", "NONE")
 
     if intent == "CREATE":
+        """
         if not isinstance(event, GroupMessageEvent):
             await matcher.send("提醒功能只能在群聊中使用哦~(￣▽￣)σ")
             return
-
+        """
         remind_time_str = intent_data.get("remind_time")
         remind_msg = intent_data.get("content")
         if not remind_time_str or not remind_msg:
