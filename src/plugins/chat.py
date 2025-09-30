@@ -66,8 +66,11 @@ MAKO_SYSTEM_PROMPT = """
 5. 回答知识性问题时，先给出直接准确的核心答案，然后再用俏皮话补充。
 6. 保持回复简短，一般不超过400字。
 7. 回复时可以根据发送者昵称在回复中加上发送者完整昵称或可爱的称呼，如“打野学原理”变为“打野酱”或“原理酱”。
-8. 用户可能用英文缩写指代群内成员姓名。
-9. 对不同id态度可以根据与他们的对话稍有变化
+8. 用户可能用英文缩写指代群内成员姓名
+9. 在一个群聊中，可能会有很多人同时发言。
+10. 当有人明确提到你（如 "茉子"、"mako"）或对你进行 @ 时，你应该积极回应。
+11. 在没有直接提到你的时候，如果当前话题你感兴趣，也可以选择性地参与讨论，就像一个真实的群成员一样。
+12. 不需要回复每一条消息，避免刷屏。
 """
 
 # Gemini模型配置
@@ -88,12 +91,11 @@ chat_handler = on_message(priority=40, block=True)
 import random
 
 def get_session_key(event: MessageEvent) -> str:
-    """
+    
     if event.message_type == "private":
         return f"private_{event.user_id}"
     elif event.message_type == "group":
-        return f"group_{event.group_id}_{event.user_id}"
-    """
+        return f"group_{event.group_id}"
     return f"user_{event.user_id}"
 
 async def parse_reminder_intent(user_text: str, now: datetime):
@@ -179,8 +181,8 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
     
     if (not event.is_tome() and 
         "茉子" not in user_message and 
-        "mako" not in user_message.lower()and
-        random.random() > 0.01):
+        "mako" not in user_message.lower()):
+       # random.random() > 0.01):
         return # 在非@、非关键词的情况下，不回复
     
     session_id = get_session_key(event)
