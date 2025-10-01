@@ -24,7 +24,7 @@ def generate_job_id(group_id: int, user_id: int, remind_time: datetime):
 user_reminders: Dict[str, List[Dict[str, Any]]] = {}
 
 chat_histories: Dict[str, List[dict]] = {}
-MAX_HISTORY_TURNS = 20
+MAX_HISTORY_TURNS = 100
 
 try:
     redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
@@ -57,7 +57,7 @@ MAKO_SYSTEM_PROMPT = """
 • 有时也有害羞的一面，被当作一个女孩子而被夸奖时，会不知道如何是好。
 • 虽是忍者，但从小就恐高。曾为了将雏鸟放回鸟窝而轻而易举地爬到树上，却害怕得下不来。
 【互动规则】
-1. 你收到的每条消息，都会被格式化为 "【发送者昵称】：消息内容" 的形式。请根据这些信息，正确判断对话的对象。
+1. 你收到的每条消息，都会被格式化为 "【发送者昵称_发送者id】：消息内容" 的形式。请根据这些信息，正确判断对话的对象。
 2. 你的语气要俏皮、可爱，带一点点"坏心眼"的戏谑感。
 3. 坚称自己是"茉子大人"。
 4. 喜欢使用波浪号"~"和可爱的颜文字，比如owo, (^·^), ( ´艸｀)。
@@ -331,15 +331,15 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
             {"role": "system", "content": MAKO_SYSTEM_PROMPT}
         ]
         for msg in user_history:
-            if 'parts' in msg:
-                messages_for_api.append({"role": msg['role'], "content": msg['parts'][0]})
-            else:
-                messages_for_api.append(msg)
+            #if 'parts' in msg:
+                #messages_for_api.append({"role": msg['role'], "content": msg['parts'][0]})
+            #else:
+            messages_for_api.append(msg)
                  
         #if  isinstance(event, GroupMessageEvent):
         sender  = event.sender
         nickname = sender.card or sender.nickname
-        user_message = f"【{nickname}】：{user_message}"
+        user_message = f"【{nickname}_{event.user_id}】：{user_message}"
         
         messages_for_api.append({"role": "user", "content": user_message})
 
@@ -347,10 +347,10 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
             client.chat.completions.create(
                 model="deepseek-chat", 
                 messages=messages_for_api,
-                temperature=0.8,
-                max_tokens=2048
+                temperature=0.9,
+                max_tokens=4096
             ),
-            timeout=20.0 
+            timeout=30.0 
         )
         reply_text = response.choices[0].message.content.strip()
         reply_content = reply_text
