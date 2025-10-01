@@ -13,10 +13,9 @@ import json
 import redis
 from datetime import datetime
 from dotenv import load_dotenv
+import hashlib
 
 load_dotenv()
-
-import hashlib
 
 def generate_job_id(group_id: int, user_id: int, remind_time: datetime):
     raw = f"{group_id}_{user_id}_{remind_time.isoformat()}"
@@ -28,7 +27,6 @@ chat_histories: Dict[str, List[dict]] = {}
 MAX_HISTORY_TURNS = 20
 
 try:
-    # 使用0号数据库存放聊天记录，和定时任务的1号数据库分开
     redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
     redis_client.ping() 
     logger.success("成功连接到Redis，聊天记录将持久化！")
