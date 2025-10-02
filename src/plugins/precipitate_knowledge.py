@@ -12,7 +12,7 @@ from datetime import datetime,timedelta
 from src.plugins import vector_db
 from src.plugins import chat
 
-@scheduler.scheduled_job("cron", hour=22, minute=50)
+@scheduler.scheduled_job("cron", hour=23, minute=0)
 async def precipitate_knowledge():
 
     redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
@@ -123,6 +123,7 @@ async def precipitate_knowledge():
                 "last_updated": datetime.now().isoformat(),
             }
             redis_client.set(key,json.dumps(user_profile))
+            logger.success(f"已建立 {nickname} 的茉子印象")
 
     except asyncio.TimeoutError:
         print("知识沉淀任务超时。")
