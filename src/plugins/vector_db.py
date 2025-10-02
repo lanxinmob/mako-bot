@@ -40,9 +40,13 @@ def add_to_db(point_text:str):
     redis_client.hset(key,mapping={"point_text":point_text,"vector":vector})
     logger.success(f"记忆{point_text}已存入Redis")
 
-def search_db(query: str,top_k: int = 3):
-    query_vecotr = embedding_model.encode(query).astype(np.float32).totypes()
-    q = (f"(*)=>[KNN {top_k} @vector $query_vector AS score]").sort_by("score").return_fields("point_text","score").dialect(2)
+def search_db(query: str,top_k: int = 3,score_threshold=0.4):
+    query_vecotr = embedding_model.encode(query).astype(np.float32).tobytes()
+    q = Query(f"(*)=>[KNN {top_k} @vector $query_vector AS score]").sort_by("score").return_fields("point_text","score").dialect(2)
     params = {"quert_vector":query_vecotr}
     results = redis_client.ft(INDEX_NAME).query(q,params).docs
-    return [doc.point_text for doc in results]
+    filtered = []
+    for doc in results:
+        if float(doc.score) < score_threshold:
+            filtered.append(doc.point_text)
+    return filtered
