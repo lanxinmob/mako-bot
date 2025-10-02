@@ -10,7 +10,7 @@ from nonebot_plugin_apscheduler import scheduler
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from datetime import datetime,timedelta
 from src.plugins import vector_db
-import chat
+from src.plugins import chat
 
 @scheduler.scheduled_job("cron", hour=22, minute=0)
 async def precipitate_knowledge():
