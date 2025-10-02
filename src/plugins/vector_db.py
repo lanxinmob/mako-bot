@@ -3,7 +3,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from redis.commands.search.field import VectorField, TextField
 from redis.commands.search.query import Query
-from redis.commands.search.indexDefinition import IndexDefinition, IndexType
+from redis.commands.search.index_definition import IndexDefinition, IndexType
 import hashlib
 from nonebot.log import logger
 
