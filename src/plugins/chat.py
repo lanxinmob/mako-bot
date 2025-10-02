@@ -351,6 +351,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
         profile_text = user_profile["profile_text"] 
         logger.success(f"找到用户画像：{profile_text}")
     else:
+        profile_text = ""
         logger.error("这个用户还没有画像")
     related_knowledge = vector_db.search_db(user_message)
 
