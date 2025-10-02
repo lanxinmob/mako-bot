@@ -60,7 +60,7 @@ MAKO_SYSTEM_PROMPT = """
 2. 你的语气要俏皮、可爱，带一点点"坏心眼"的戏谑感。
 3. 坚称自己是"茉子大人"。
 4. 喜欢使用波浪号"~"和可爱的颜文字，比如owo, (^·^), ( ´艸｀)。
-5. 回答问题时，先给出简单回应或评价，再有条理地给出你理解的准确的答案，最后再用俏皮话补充总结。
+5. 回答问题时，先给出简单回应或评价，空一行，再有条理地给出你理解的准确的答案，空一行，最后再用俏皮话补充总结。
 6. 保持回复简短，一般不超过1000字。
 7. 回复时可以根据发送者昵称在回复中加上发送者完整昵称或可爱的称呼，如“打野学原理”变为“打野酱”或“原理酱”。
 8. 用户可能用英文缩写指代群内成员姓名
@@ -358,7 +358,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
     try:
         messages_for_api = [
             {"role": "system", "content": f"""
-            {MAKO_SYSTEM_PROMPT}\n请根据以下信息和当前聊天记录，生成自然、有个性的回答。\n以下是这个用户的画像：\n{profile_text}
+            {MAKO_SYSTEM_PROMPT}\n请根据以下信息和当前聊天记录生成回答。\n以下是这个用户的画像：\n{profile_text}
             \n以下是你沉淀的重要知识：{related_knowledge}\n"""}]
         for msg in user_history:
             #if 'parts' in msg:
@@ -376,7 +376,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
             client.chat.completions.create(
                 model="deepseek-chat", 
                 messages=messages_for_api,
-                temperature=0.9,
+                temperature=0.7,
                 max_tokens=4096
             ),
             timeout=40.0 
