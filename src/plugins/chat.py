@@ -376,7 +376,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
             client.chat.completions.create(
                 model="deepseek-chat", 
                 messages=messages_for_api,
-                temperature=0.7,
+                temperature=0.1,
                 max_tokens=4096
             ),
             timeout=40.0 
