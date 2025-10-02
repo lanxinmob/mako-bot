@@ -22,7 +22,7 @@ except redis.exceptions.ConnectionError as e:
 INDEX_NAME = "Long_term_memory"
 PREFIX = "memory "
 def create_db():
-    content = {TextField("piont_text"),
+    content = {TextField("point_text"),
                VectorField("vector","HNSW",{"TYPE":"FLOAT32","DIM":VECTOR_DIMENSION,"DISTANCE_METRIC":"COSINE"})
                }
     try:
