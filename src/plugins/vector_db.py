@@ -9,7 +9,7 @@ from nonebot.log import logger
 print("加载模型")
 embedding_model = SentenceTransformer("moka-ai/m3e-base")
 VECTOR_DIMENSION = embedding_model.get_sentence_embedding_dimension()
-print("加载完成，向量维度：{VECTOR_DIMENSION}")
+print(f"加载完成，向量维度：{VECTOR_DIMENSION}")
 
 try:
     redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
