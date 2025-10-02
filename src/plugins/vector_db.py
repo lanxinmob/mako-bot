@@ -43,9 +43,9 @@ def add_to_db(point_text:str):
 
 def search_db(query: str,top_k: int = 3,score_threshold=0.4):
     query_vecotr = embedding_model.encode(query).astype(np.float32).tobytes()
-    q = Query(f"(*)=>[KNN {top_k} @vector $query_vector AS score]").sort_by("score").return_fields("point_text","score").dialect(2)
+    query = Query(f"(*)=>[KNN {top_k} @vector $query_vector AS score]").sort_by("score").return_fields("point_text","score").dialect(2)
     params = {"query_vector":query_vecotr}
-    results = redis_client.ft(INDEX_NAME).search(q,params).docs
+    results = redis_client.ft(INDEX_NAME).search(query,params).docs
     filtered = []
     for doc in results:
         if float(doc.score) < score_threshold:
