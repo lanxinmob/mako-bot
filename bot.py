@@ -13,6 +13,7 @@ nonebot.load_plugin("src.plugins.scheduler")
 nonebot.load_plugin("src.plugins.weather")
 nonebot.load_plugin("src.plugins.what_to_eat")
 nonebot.load_plugin("src.plugins.precipitate_knowledge")
+nonebot.load_plugin("src.plugins.vector_db")
 
 if __name__ == "__main__":
     nonebot.run()
