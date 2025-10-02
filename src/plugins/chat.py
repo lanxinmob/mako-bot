@@ -14,7 +14,7 @@ import redis
 from datetime import datetime
 from dotenv import load_dotenv
 import hashlib
-import vector_db
+from src.plugins import vector_db
 load_dotenv()
 
 def generate_job_id(group_id: int, user_id: int, remind_time: datetime):
