@@ -64,7 +64,6 @@ async def precipitate_knowledge():
            print("没有提炼出知识点。")
            return  
         
-        vector_db.create_db()
         for point in knowledge_points: 
             vector_db.add_to_db(point)
         logger.success(f"成功沉淀{len(knowledge_points)}条知识加入存储队列")

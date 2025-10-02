@@ -175,6 +175,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
     sender  = event.sender
     nickname = sender.card or sender.nickname
     time = datetime.now().isoformat()
+    vector_db.create_db()
     user_record = {
         "role": "user",
         "nickname": event.sender.card or event.sender.nickname,
