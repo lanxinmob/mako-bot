@@ -12,7 +12,7 @@ from datetime import datetime,timedelta
 from src.plugins import vector_db
 from src.plugins import chat
 
-@scheduler.scheduled_job("cron", hour=22, minute=0)
+@scheduler.scheduled_job("cron", hour=22, minute=50)
 async def precipitate_knowledge():
 
     redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
@@ -29,13 +29,13 @@ async def precipitate_knowledge():
     try:
         messages_for_api = [
             {"role": "system", "content": """
-             你是一个信息分析专家。请从以下的聊天记录中，提取出所有客观事实、关键事件、用户偏好和重要结论。
-            请遵循以下规则：
+            你是千恋万花中的常陆茉子，一个有点小恶魔性格、喜欢捉弄人但内心善良的女生。
+            今天又发生了很多事，你想把其中一些有意思的事情随手记下来，不用太正式，就像写轻松的日记一样。
+            请把聊天记录里出现的有价值的事件、偏好和有趣的话题写下来，带一点调皮和温度。
             - 忽略日常闲聊和无意义的对话。
-            - 将每一条提炼出的知识点写成一个独立、完整的句子。
+            - 将每一条写成一个独立、完整的句子。
             - 如果是针对某个用户的，请明确指出。
             - 以无序列表的格式输出。
-
             聊天记录如下：
             """}]
         for log in logs:
@@ -117,7 +117,7 @@ async def precipitate_knowledge():
             )
             profile_text = response.choices[0].message.content.strip()
             user_profile = {
-                "user_id": id,
+                "user_id": uid,
                 "nickname": nickname,
                 "profile_text": profile_text,
                 "last_updated": datetime.now().isoformat(),
