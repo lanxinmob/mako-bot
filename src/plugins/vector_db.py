@@ -27,7 +27,7 @@ def create_db():
                }
     try:
         redis_client.ft(INDEX_NAME).info()
-    except redis.exceptions.ResponseError():
+    except redis.exceptions.ResponseError:
         logger.error(f"索引{INDEX_NAME}不存在，正在创建")
         redis_client.ft(INDEX_NAME).create_index(fields=content,
                                                  definition=redis.commands.search.document.DocumentDefiniton(prefix=[PREFIX]))
