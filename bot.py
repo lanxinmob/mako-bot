@@ -12,7 +12,7 @@ nonebot.load_plugin("src.plugins.chat")
 nonebot.load_plugin("src.plugins.scheduler")
 nonebot.load_plugin("src.plugins.weather")
 nonebot.load_plugin("src.plugins.what_to_eat")
-
+nonebot.load_plugin("src.plugins.precipitate_knowledge")
 
 if __name__ == "__main__":
     nonebot.run()
