@@ -378,7 +378,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
                 temperature=0.9,
                 max_tokens=4096
             ),
-            timeout=30.0 
+            timeout=40.0 
         )
         reply_text = response.choices[0].message.content.strip()
         reply_content = reply_text
