@@ -9,7 +9,7 @@ import redis
 from nonebot_plugin_apscheduler import scheduler
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from datetime import datetime,timedelta
-import vector_db
+from src.plugins import vector_db
 import chat
 
 @scheduler.scheduled_job("cron", hour=22, minute=0)
@@ -40,7 +40,7 @@ async def precipitate_knowledge():
             """}]
         for log in logs:
             if log["role"] =="user":
-               message= f"【{log["nickname"]}_{log["user_id"]}】：{log["content"]}"
+               message= f"【{log['nickname']}_{log['user_id']}】：{log['content']}"
                messages_for_api.append({"role":"user","content":message})
             messages_for_api.append({"role":"assistant","content":log["content"]})
 
