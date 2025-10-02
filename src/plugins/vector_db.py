@@ -3,6 +3,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from redis.commands.search.field import VectorField, TextField
 from redis.commands.search.query import Query
+from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 import hashlib
 from nonebot.log import logger
 
@@ -30,7 +31,7 @@ def create_db():
     except redis.exceptions.ResponseError:
         logger.error(f"索引{INDEX_NAME}不存在，正在创建")
         redis_client.ft(INDEX_NAME).create_index(fields=content,
-                                                 definition=redis.commands.search.document.DocumentDefinition(prefix=[PREFIX]))
+                                                 definition=IndexDefinition(prefix=[PREFIX], index_type=IndexType.HASH))
         logger.success(f"索引{INDEX_NAME}创建成功")
 
 def add_to_db(point_text:str):
