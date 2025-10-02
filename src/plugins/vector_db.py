@@ -8,7 +8,7 @@ from nonebot.log import logger
 
 print("加载模型")
 embedding_model = SentenceTransformer("moka-ai/m3e-base")
-VECTOR_DIMENSION = embedding_model.get_sentence_model_dimension()
+VECTOR_DIMENSION = embedding_model.get_sentence_embedding_dimension()
 print("加载完成，向量维度：{VECTOR_DIMENSION}")
 
 try:

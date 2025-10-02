@@ -89,3 +89,6 @@ wcwidth==0.2.13
 websockets==15.0.1
 win32_setctime==1.2.0
 yarl==1.20.1
+redis==6.2.0
+numpy
+sentence-transformers
