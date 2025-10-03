@@ -9,6 +9,9 @@ import redis
 from nonebot_plugin_apscheduler import scheduler
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from datetime import datetime,timedelta
+from nonebot import on_command
+from nonebot.matcher import Matcher
+from nonebot.params import ArgPlainText,CommandArg
 from src.plugins import vector_db
 from src.plugins import chat
 
@@ -132,3 +135,33 @@ async def precipitate_knowledge():
         print(f"调用LLM出错: {e}")
         return
 
+memory_handler = on_command("可塑性记忆", aliases={"memory"},priority=10,block=True)
+
+@memory_handler.handle()
+async def handle_first_receive(matcher: Matcher, args: Message = CommandArg()):
+    plain_text = args.extract_plain_text()
+    if plain_text:
+        matcher.set_arg("user_id", args)
+
+@memory_handler.got("user_id", prompt="要查看茉子对谁的印象~？")
+async def handle_get_weather(user_id: str = ArgPlainText()):
+    user_id = user_id.strip()
+
+    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    if not redis_client:
+        await memory_handler.finish("Redis 连接未配置，无法查询记忆。")
+        return
+    
+    key = f"user_profile:{user_id}"
+    try:
+        profile_json = redis_client.get(key)
+        if profile_json:
+            profile_data = json.loads(profile_json)
+            memory_text = profile_data.get("profile_text", "记忆数据中缺少画像文本。")
+            nickname = profile_data.get("nickname")
+            await memory_handler.finish(f"对{nickname}({user_id})的茉子印象:\n\n{memory_text}")
+        else:
+            await memory_handler.finish(f"茉子暂时没有对用户 {user_id} 的记忆。")
+
+    except Exception as e:
+        logger.error(f"查询 Redis 失败: {e}")
