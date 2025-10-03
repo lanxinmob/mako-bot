@@ -73,7 +73,7 @@ async def precipitate_knowledge():
 
         user_id = {log["user_id"] for log in logs if log["role"]=="user"}
         for uid in user_id:
-            user_log = [log for log in logs if log["user_id"]==uid]
+            user_log = [log for log in logs if log["role"]=="user" and log["user_id"]==uid]
             nickname = user_log[0]["nickname"]
             chat_log = [log["content"] for log in user_log ]
             key = f"{PROFILE_PREFIX}{uid}"
