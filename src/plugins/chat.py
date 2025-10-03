@@ -83,7 +83,7 @@ model = genai.GenerativeModel(
     ]
 )"""
 
-chat_handler = on_message(priority=1, block=True)
+chat_handler = on_message(priority=40, block=True)
 import random
 
 def get_session_key(event: MessageEvent) -> str:
