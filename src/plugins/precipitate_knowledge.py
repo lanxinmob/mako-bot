@@ -12,7 +12,7 @@ from datetime import datetime,timedelta
 from src.plugins import vector_db
 from src.plugins import chat
 
-@scheduler.scheduled_job("cron", hour=23, minute=0)
+@scheduler.scheduled_job("cron", hour=11, minute=15)
 async def precipitate_knowledge():
 
     redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
