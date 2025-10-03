@@ -9,6 +9,7 @@ import redis
 from nonebot_plugin_apscheduler import scheduler
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from datetime import datetime,timedelta
+from nonebot.exception import FinishedException
 from nonebot import on_command
 from nonebot.matcher import Matcher
 from nonebot.params import ArgPlainText,CommandArg
@@ -162,6 +163,8 @@ async def handle_get_weather(target_id: str = ArgPlainText()):
             await memory_handler.finish(f"对{nickname}({target_id})的茉子印象:\n\n{memory_text}")
         else:
             await memory_handler.finish(f"茉子暂时没有对用户 {target_id} 的记忆。")
-
+    
+    except FinishedException:
+        await memory_handler.finish("这份记忆报告，茉子已经整理完毕啦！请查收~ ૮₍ ˶•⤙•˶ ₎ა")
     except Exception as e:
         logger.error(f"查询 Redis 失败: {e}")
