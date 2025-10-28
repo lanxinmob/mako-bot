@@ -77,6 +77,8 @@
 * **Lagrange.OneBot**：实现 OneBot V11 协议，与 NoneBot2 对接。
 * **NoneBot2**：核心框架，负责插件管理与事件分发。
 * **Redis**：存储用户画像、群聊记忆、向量知识库。
+---
+因为 Lagrange.onebot 暂时终止，已替换为使用 NapCatQQ 
 
 ## 🚀 快速开始
 
@@ -149,3 +151,4 @@ nb run
 ### 鸣谢 
 - [nonebot_plugin-apscheduler](https://github.com/nonebot/plugin-apscheduler)
 - [nonebot_plugin_lagrange](https://github.com/Lonely-Sails/nonebot-plugin-lagrange)
+- [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
