@@ -1,170 +1,111 @@
-from nonebot import get_bot
-import random
-import os
-import requests
-from nonebot.log import logger
-import asyncio
-import json
-import redis
-from nonebot_plugin_apscheduler import scheduler
-from nonebot.adapters.onebot.v11 import Message, MessageSegment
-from datetime import datetime,timedelta
-from nonebot.exception import FinishedException
+from __future__ import annotations
+
+from collections import defaultdict
+
 from nonebot import on_command
+from nonebot.adapters.onebot.v11 import Message
+from nonebot.log import logger
 from nonebot.matcher import Matcher
-from nonebot.params import ArgPlainText,CommandArg
-from src.plugins import vector_db
-from src.plugins import chat
+from nonebot.params import ArgPlainText, CommandArg
+from nonebot_plugin_apscheduler import scheduler
+
+from src.services.llm import get_deepseek_client, get_openai_client, has_deepseek, has_openai
+from src.services.storage import StorageService
+from src.services.vector_store import VectorStore
+
+storage = StorageService()
+vector_store = VectorStore()
+vector_store.ensure_index()
+
+
+async def _summarize(prompt: str) -> str:
+    if has_deepseek():
+        client = get_deepseek_client()
+        response = await client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=1200,
+        )
+        return response.choices[0].message.content.strip()
+    if has_openai():
+        client = get_openai_client()
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=1200,
+        )
+        return response.choices[0].message.content.strip()
+    return ""
+
 
 @scheduler.scheduled_job("cron", hour=22, minute=0)
-async def precipitate_knowledge():
+async def precipitate_knowledge() -> None:
+    records = storage.get_recent_global_records(hours=24)
+    if not records:
+        return
 
-    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-    all_logs = redis_client.lrange("all_memory",0,-1)
+    lines = []
+    user_logs = defaultdict(list)
+    for record in records:
+        if record.role == "user":
+            lines.append(f"[{record.nickname}_{record.user_id}] {record.content}")
+            user_logs[record.user_id].append((record.nickname or str(record.user_id), record.content))
+        else:
+            lines.append(f"[mako] {record.content}")
+    corpus = "\n".join(lines)
 
-    logs = []
-    past_time = datetime.now()-timedelta(days=1)
-    for log in all_logs:
-        log = json.loads(log)
-        log_time = datetime.fromisoformat(log["time"])
-        if log_time>=past_time:
-            logs.append(log)
+    knowledge_prompt = (
+        "请从以下聊天记录提炼 8 条以内长期有价值的记忆点，"
+        "每条一行，中文简洁，不要废话：\n" + corpus
+    )
+    summary = await _summarize(knowledge_prompt)
+    if summary:
+        for line in summary.splitlines():
+            point = line.strip("- ").strip()
+            if point:
+                vector_store.add(point)
 
-    try:
-        messages_for_api = [
-            {"role": "system", "content": """
-            你是千恋万花中的常陆茉子，一个有点小恶魔性格、喜欢捉弄人但内心善良的女生。
-            今天又发生了很多事，你想把其中一些有意思的事情随手记下来，不用太正式，就像写轻松的日记一样。
-            请把聊天记录里出现的有价值的事件、偏好和有趣的话题写下来，带一点调皮和温度。
-            - 忽略日常闲聊和无意义的对话。
-            - 将每一条写成一个独立、完整的句子。
-            - 如果是针对某个用户的，请明确指出。
-            - 以无序列表的格式输出。
-            聊天记录如下：
-            """}]
-        for log in logs:
-            if log["role"] =="user":
-               message= f"【{log['nickname']}_{log['user_id']}】：{log['content']}"
-               messages_for_api.append({"role":"user","content":message})
-            messages_for_api.append({"role":"assistant","content":log["content"]})
-
-        response = await asyncio.wait_for(
-            chat.client.chat.completions.create(
-                model="deepseek-chat", 
-                messages=messages_for_api,
-                temperature=0.5,
-                max_tokens=2048
-            ),
-            timeout=30.0 
+    for user_id, msgs in user_logs.items():
+        nickname = msgs[0][0]
+        chat_text = "\n".join(item[1] for item in msgs[-50:])
+        old_profile = storage.get_profile(user_id)
+        old_text = old_profile["profile_text"] if old_profile else "暂无历史画像"
+        profile_prompt = (
+            f"请基于历史画像与最新发言，更新用户画像。\n"
+            f"用户: {nickname}({user_id})\n"
+            f"历史画像:\n{old_text}\n"
+            f"最近发言:\n{chat_text}\n"
+            f"输出格式:\n"
+            f"【核心特质】\n【行为模式】\n【关系定位】\n【茉子认知画像】"
         )
-        reply_text = response.choices[0].message.content.strip()
-        
-        knowledge_points:list[str] = []
-        for line in reply_text.split("\n"):
-            line = line.strip(".- ").strip()
-            if line:
-                knowledge_points.append(line)
-        if not knowledge_points:
-           print("没有提炼出知识点。")
-           return  
-        
-        for point in knowledge_points: 
-            vector_db.add_to_db(point)
-        logger.success(f"成功沉淀{len(knowledge_points)}条知识加入存储队列")
+        profile = await _summarize(profile_prompt)
+        if profile:
+            storage.set_profile(user_id, nickname, profile)
+    logger.success("knowledge precipitation done.")
 
 
-        PROFILE_PREFIX = "user_profile:"
+memory_handler = on_command("可塑性记忆", aliases={"memory"}, priority=10, block=True)
 
-        user_id = {log["user_id"] for log in logs if log["role"]=="user"}
-        for uid in user_id:
-            user_log = [log for log in logs if log["role"]=="user" and log["user_id"]==uid]
-            nickname = user_log[0]["nickname"]
-            chat_log = [log["content"] for log in user_log ]
-            key = f"{PROFILE_PREFIX}{uid}"
-            old_profile = redis_client.get(key)
-            if old_profile:
-                old_profile = json.loads(old_profile)
-                prompt_user = f"""
-                以下是你对用户 {nickname}({uid}) 的历史画像：
-                {old_profile}
-
-                以下是该用户在最近一天的发言记录：
-                {chat_log}
-
-                请基于历史画像 + 新的发言，更新用户画像，保持相同格式并合理融合：
-                【核心特质】
-                【行为模式】
-                【关系定位】
-                【茉子认知画像】
-                """ 
-            else:    
-                prompt_user = f"""
-                请根据用户 {nickname} ({uid}) 最近24小时的发言,  
-                从你的视角总结这个用户的画像，按照以下模板输出：
-                【核心特质】
-                【行为模式】
-                【关系定位】
-                【茉子认知画像】
-                以下是该用户在最近一天的发言记录：
-                {chat_log}
-                """
-            response = await asyncio.wait_for(
-                chat.client.chat.completions.create(
-                    model="deepseek-chat", 
-                    messages=[
-                        {"role": "system", "content": "你是千恋万花中的常陆茉子，一个有点小恶魔性格、喜欢捉弄人但内心善良的女生"},
-                        {"role": "user", "content": prompt_user}],
-                    temperature=0.5,
-                    max_tokens=2048
-                ),
-                timeout=30.0 
-            )
-            profile_text = response.choices[0].message.content.strip()
-            user_profile = {
-                "user_id": uid,
-                "nickname": nickname,
-                "profile_text": profile_text,
-                "last_updated": datetime.now().isoformat(),
-            }
-            redis_client.set(key,json.dumps(user_profile))
-            logger.success(f"已建立 {nickname} 的茉子印象")
-
-    except asyncio.TimeoutError:
-        print("知识沉淀任务超时。")
-        return
-    except Exception as e:
-        print(f"调用LLM出错: {e}")
-        return
-
-memory_handler = on_command("可塑性记忆", aliases={"memory"},priority=10,block=True)
 
 @memory_handler.handle()
-async def handle_first_receive(matcher: Matcher, args: Message = CommandArg()):
-    plain_text = args.extract_plain_text()
+async def handle_first_receive(matcher: Matcher, args: Message = CommandArg()) -> None:
+    plain_text = args.extract_plain_text().strip()
     if plain_text:
         matcher.set_arg("target_id", args)
 
-@memory_handler.got("target_id", prompt="要查看茉子对谁的印象~？")
-async def handle_get_weather(target_id: str = ArgPlainText()):
-    target_id = target_id.strip()
 
-    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-    if not redis_client:
-        await memory_handler.finish("Redis 连接未配置，无法查询记忆。")
+@memory_handler.got("target_id", prompt="要查看谁的画像？请输入用户ID")
+async def handle_get_memory(target_id: str = ArgPlainText()) -> None:
+    target_id = target_id.strip()
+    if not target_id.isdigit():
+        await memory_handler.finish("用户ID格式不正确。")
         return
-    
-    key = f"user_profile:{target_id}"
-    try:
-        profile_json = redis_client.get(key)
-        if profile_json:
-            profile_data = json.loads(profile_json)
-            memory_text = profile_data.get("profile_text", "记忆数据中缺少画像文本。")
-            nickname = profile_data.get("nickname")
-            await memory_handler.finish(f"对{nickname}({target_id})的茉子印象:\n\n{memory_text}")
-        else:
-            await memory_handler.finish(f"茉子暂时没有对用户 {target_id} 的记忆。")
-    
-    except FinishedException:
-        await memory_handler.finish("这份记忆报告，茉子已经整理完毕啦！请查收~ ૮₍ ˶•⤙•˶ ₎ა")
-    except Exception as e:
-        logger.error(f"查询 Redis 失败: {e}")
+    profile = storage.get_profile(int(target_id))
+    if not profile:
+        await memory_handler.finish("暂无该用户画像。")
+        return
+    await memory_handler.finish(
+        f"对 {profile.get('nickname')}({target_id}) 的画像：\n\n{profile.get('profile_text', '')}"
+    )
