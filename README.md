@@ -1,154 +1,71 @@
-<p align="center">
-    <img src="src/mako.jpg" width="200" height="200" alt="avater">
-</p>
+# Mako-Bot
 
-<div align="center">
-  
-# 🌸 Mako-Bot 
+基于 `NoneBot2 + NapCat(OneBot V11)` 的拟人化 QQ 机器人，采用“自然对话自动调用能力”模式。
 
-✨基于 [NoneBot2](https://github.com/nonebot/nonebot2) 和 [Lagrange.OneBot](https://github.com/LagrangeDev/Lagrange.Core) 的 QQ 聊天机器人✨
-</div>
+## 重构结果
 
-<p align="center">
-  <a href="https://github.com/lanxinmob/mako-bot/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
-  </a>
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="python">
-</p>
+- 分层架构
+- `src/core`：配置、日志、错误、系统提示词
+- `src/services`：LLM、Redis、向量库、图片、语言、搜索、地图、笔记、工具执行器
+- `src/models`：统一数据模型
+- `src/plugins`：聊天入口、调度、天气、知识沉淀、辅助插件
 
-## 📖 基本介绍
-她的身份是《千恋万花》中常陆茉子：一个有点小恶魔性格、喜欢捉弄人但内心善良的少女忍者。
-拥有统一且持续的记忆，能进行拟人化的陪伴式聊天。
+## 已实现能力（自然触发）
 
-## 🧩 功能特性
-### 已开发功能
-- [x] 每日发送早安
-- [x] 以茉子身份与用户进行聊天
-- [x] 每日发送各种最新资讯
-- [x] 查询某地天气
-- [x] 设置修改删除定时提醒
-- [x] 创建、修改、删除定时提醒的功能
-- [x] 回复时引用消息
-- [x] 在服务器上搭建代理服务
-#### RAG（检索增强生成）
-- [x] 每天通过聊天记录建立或更新用户画像个人档案
-- [x] 茉子每日日记，记录有趣或重要事件
-- [x] 根据以上两个及当前聊天的上下文生成茉子的回复
-### 待开发功能
-- [ ] 图片相关功能
-- [ ] 语言相关功能
-- [ ] 识别表情含义
-- [ ] 加入好感度设计
-- [ ] 可以识别链接 进行Google搜索 
-- [ ] 手动设置笔记功能
-- [ ] 高德查询功能
+- 图片能力：看图理解、文生图、灰度/模糊/缩放处理
+- 语言能力：翻译、语种检测、语音转文字、文字转语音
+- 表情识别：识别 `face` 表情与文本情绪并影响互动
+- 好感度系统：按互动情绪动态变化，影响回复风格
+- Google 搜索：联网检索与链接摘要
+- 笔记系统：自然语言新增/查询/修改/删除笔记
+- 高德地图：地点解析、周边搜索、路线规划
 
-#### 可以做到
-* 🎭 **身份锁定**：永远保持常陆茉子的人设，不会被用户指令改变。
-* 🗨️ **多轮对话**：记住上下文，持续、自然的聊天体验。
-* 📝 **知识沉淀 (RAG)**：
-  * 记录用户画像（核心特质 / 行为模式 / 关系定位 / 茉子认知画像）
-  * 存储群聊中的重要事件、通用知识，建立向量数据库
-  * 结合画像 + 记忆 + 历史对话生成更贴合的回复
+说明：除保留少量命令入口外，主流程已支持在普通聊天中自动判定并调用能力。
 
-
-## ⚙️ 架构说明
-
-整体分为 **消息接入层**（Lagrange.OneBot）+ **逻辑层**（NoneBot2 + 插件）+ **记忆与知识存储**（Redis + 向量数据库）：
-
-```
-┌───────────────┐
-│    QQ 客户端   │
-└───────▲───────┘
-        │
-        │ NTQQ 协议
-        │
-┌───────┴─────────┐     反向 WebSocket     ┌──────────────┐
-│  Lagrange.OneBot │◀──────────────────────▶│   NoneBot2   │
-└──────────────────┘                         └───────▲──────┘
-                                                   │ 插件机制
-                                                   │
-                                    ┌──────────────┴──────────────┐
-                                    │    chat / scheduler / …     │
-                                    └─────────────────────────────┘
-```
-
-* **Lagrange.Core**：实现 NTQQ 协议，连接 QQ 并接收/发送消息。
-* **Lagrange.OneBot**：实现 OneBot V11 协议，与 NoneBot2 对接。
-* **NoneBot2**：核心框架，负责插件管理与事件分发。
-* **Redis**：存储用户画像、群聊记忆、向量知识库。
----
-因为 Lagrange.onebot 暂时终止，已替换为使用 NapCatQQ 
-
-## 🚀 快速开始
-
-### 1. 克隆项目
-
-```bash
-git clone https://github.com/lanxinmob/mako-bot.git
-cd mako-bot
-```
-
-### 2. 安装依赖
+## 快速启动
 
 ```bash
 pip install -r requirements.txt
-```
-
-### 3. 运行 RedisStack
-
-```bash
-docker run -d --name redis-stack -p 6379:6379 -p 8001:8001 redis/redis-stack:latest
-```
-
-### 4. 配置环境变量 `.env`
-
-```ini
-# NoneBot 配置
-HOST=127.0.0.1
-PORT=8080
-
-# Lagrange 配置
-LAGRANGE_QQ=你的QQ号
-LAGRANGE_PASSWORD=""  # 留空则扫码登录
-LAGRANGE_PROTOCOL="Android"       
-
-# 模型配置
-GEMINI_API_KEY =''
-DEEPSEEK_API_KEY=''
-
-# 消息、天气查询配置
-GROUP_ID = ""
-your_api_host = ""
-your_api = ""
-tianxin_key = ''
-```
-
-### 5. 安装插件
-```
-nb plugin install nonebot-plugin-apscheduler
-nb plugin install nonebot_plugin_lagrange
-```
-
-### 6. 启动机器人
-```
 nb run
 ```
-### 7. 启动 Lagrange
 
-运行 Lagrange.exe 或 Docker 容器，扫码登录 QQ。
+或：
 
-##  系统提示词（System Prompt）
+```bash
+python bot.py
+```
 
-机器人拥有固定人设提示词：
+## NapCat 接入
 
-> 你是千恋万花中的常陆茉子，一个有点小恶魔性格、喜欢捉弄人但内心善良的女生，拥有统一且持续的现世记忆……
+1. 启动 NapCat 并登录 QQ。
+2. 在 NapCat 中开启 OneBot V11 反向 WebSocket，上报地址指向本机 NoneBot：
+   - `ws://127.0.0.1:8080/onebot/v11/ws`
+3. 如配置了访问令牌，令牌与 `.env` 中 `ONEBOT_ACCESS_TOKEN` 保持一致。
 
-确保无论何种情况都不会脱离“常陆茉子”的身份，保持俏皮可爱的语气，并能认真深入地回答问题。
+## 环境变量
 
-💡 茉子就在那里等待着你的第一声问候！
+建议复制 `.env.example` 到 `.env` 后填写。
 
-### 鸣谢 
-- [nonebot_plugin-apscheduler](https://github.com/nonebot/plugin-apscheduler)
-- [nonebot_plugin_lagrange](https://github.com/Lonely-Sails/nonebot-plugin-lagrange)
-- [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
+核心项：
+
+- `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY`
+- `REDIS_URL`（可选，默认本地 Redis）
+- `QWEATHER_HOST` `QWEATHER_KEY`
+- `GOOGLE_API_KEY` `GOOGLE_CX`
+- `AMAP_KEY`
+
+## 典型自然对话示例
+
+- “这张图里有什么？”
+- “把这张图改成黑白，再缩放到 800x800”
+- “把这句话翻译成英文：今天很开心”
+- “帮我记一下：周六 9 点开组会”
+- “查一下上海明天天气”
+- “从人民广场到虹桥火车站怎么去”
+- “帮我搜索今天 OpenAI 的最新消息”
+
+## 已知约束
+
+- 部分能力依赖第三方 API Key。
+- 图片和语音能力需要 OneBot 消息段可访问到资源 URL。
+- 向量检索依赖 Redis Stack（RediSearch）。
