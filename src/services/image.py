@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import imghdr
 import warnings
 from io import BytesIO
 from typing import Optional, Tuple
@@ -11,6 +12,7 @@ from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
 
 from src.core.config import get_settings
 from src.core.errors import NotConfiguredError
+from src.services.gemini import describe_image_with_gemini, has_gemini
 from src.services.llm import get_openai_client, has_openai
 
 USER_AGENT = (
@@ -20,25 +22,69 @@ USER_AGENT = (
 )
 
 
+def _detect_mime(image_bytes: bytes) -> str:
+    kind = imghdr.what(None, h=image_bytes)
+    if kind == "png":
+        return "image/png"
+    if kind in {"jpeg", "jpg"}:
+        return "image/jpeg"
+    if kind == "gif":
+        return "image/gif"
+    if kind == "webp":
+        return "image/webp"
+    return "application/octet-stream"
+
+
+async def download_image_data(url: str) -> tuple[bytes, str]:
+    headers = {"User-Agent": USER_AGENT}
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+        content = resp.content
+        header_mime = resp.headers.get("content-type", "").split(";")[0].strip()
+        mime = header_mime if header_mime.startswith("image/") else _detect_mime(content)
+        return content, mime
+
+
+async def download_image_bytes(url: str) -> bytes:
+    content, _ = await download_image_data(url)
+    return content
+
+
 async def describe_image_url(image_url: str) -> str:
     settings = get_settings()
-    if not has_openai():
-        raise NotConfiguredError("OPENAI_API_KEY is not configured.")
-    client = get_openai_client()
-    response = await client.chat.completions.create(
-        model=settings.vision_model,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "请用简洁中文描述这张图片的内容。"},
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ],
-            }
-        ],
-        max_tokens=256,
-    )
-    return response.choices[0].message.content.strip()
+
+    # Prefer Gemini for non-text when explicitly requested.
+    if settings.image_provider == "gemini":
+        if not has_gemini():
+            raise NotConfiguredError("IMAGE_PROVIDER=gemini but GEMINI_API_KEY is missing.")
+        image_bytes, mime_type = await download_image_data(image_url)
+        return await describe_image_with_gemini(image_bytes, mime_type)
+
+    # OpenAI route.
+    if has_openai():
+        client = get_openai_client()
+        response = await client.chat.completions.create(
+            model=settings.vision_model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "请用简洁中文描述这张图片的内容。"},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                }
+            ],
+            max_tokens=256,
+        )
+        return response.choices[0].message.content.strip()
+
+    # Gemini fallback if OpenAI is unavailable.
+    if has_gemini():
+        image_bytes, mime_type = await download_image_data(image_url)
+        return await describe_image_with_gemini(image_bytes, mime_type)
+
+    raise NotConfiguredError("No multimodal provider configured.")
 
 
 async def generate_image(prompt: str) -> str:
@@ -52,14 +98,6 @@ async def generate_image(prompt: str) -> str:
         size=settings.image_size,
     )
     return response.data[0].url
-
-
-async def download_image_bytes(url: str) -> bytes:
-    headers = {"User-Agent": USER_AGENT}
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-        resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
-        return resp.content
 
 
 def _parse_resize_value(value: str) -> Tuple[Optional[int], Optional[int]]:

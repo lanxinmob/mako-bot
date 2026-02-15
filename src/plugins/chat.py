@@ -19,7 +19,7 @@ from src.services.chat_engine import ChatEngine
 from src.services.emoji import analyze_emoji
 from src.services.intent import decide_intents
 from src.services.tool_executor import ToolExecutor
-from src.utils.message import collect_audio_urls, collect_face_ids, collect_image_urls
+from src.utils.message import normalize_message
 
 chat_handler = on_message(priority=40, block=True)
 
@@ -38,6 +38,10 @@ def _is_for_mako(event: MessageEvent, text: str) -> bool:
     if "茉子" in text or "mako" in lower:
         return True
     return random.random() <= settings.reply_random_chance
+
+
+def _is_non_text_directed(segment_types: list[str]) -> bool:
+    return "at" in segment_types or "reply" in segment_types
 
 
 def _nickname(event: MessageEvent) -> str:
@@ -68,23 +72,29 @@ def _build_reply_message(
 @chat_handler.handle()
 async def handle_chat(matcher: Matcher, event: MessageEvent) -> None:
     raw_message = event.get_message()
-    text = _safe_text(event.get_plaintext())
-    if not text and not raw_message:
+    normalized = normalize_message(raw_message)
+    text = _safe_text(normalized.plain_text)
+    if not text and not normalized.segment_types:
         return
 
-    if not _is_for_mako(event, text):
-        return
+    dispatch_text = text or normalized.segment_summary
+    if not _is_for_mako(event, dispatch_text):
+        if not _is_non_text_directed(normalized.segment_types):
+            return
 
     user_id = event.user_id
     nickname = _nickname(event)
     group_id = event.group_id if isinstance(event, GroupMessageEvent) else None
     session_id = chat_engine.session_key(event.message_type, user_id, group_id)
 
-    image_urls = collect_image_urls(raw_message)
-    audio_urls = collect_audio_urls(raw_message)
-    face_ids = collect_face_ids(raw_message)
+    image_urls = normalized.image_urls
+    audio_urls = normalized.audio_urls
+    face_ids = normalized.face_ids
+    user_text = normalized.build_user_text()
+    if not user_text:
+        user_text = "我发送了一条消息。"
 
-    emoji_result = analyze_emoji(face_ids, text)
+    emoji_result = analyze_emoji(face_ids, user_text)
     if emoji_result.affinity_delta:
         affinity_service.adjust(user_id, emoji_result.affinity_delta)
 
@@ -97,13 +107,16 @@ async def handle_chat(matcher: Matcher, event: MessageEvent) -> None:
     tool_result = await tool_executor.run(
         decisions=decisions,
         user_id=user_id,
-        text=text,
+        text=user_text,
         image_urls=image_urls,
         audio_urls=audio_urls,
         face_ids=face_ids,
     )
 
+    base_context = normalized.segment_summary
     tool_context = tool_result.context_text()
+    if base_context:
+        tool_context = f"[原始消息段]\n{base_context}\n\n{tool_context}".strip()
     if emoji_result.labels:
         labels = "、".join(emoji_result.labels)
         extra_context = f"表情情绪识别：{labels}，sentiment={emoji_result.sentiment}"
@@ -114,7 +127,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent) -> None:
             session_id=session_id,
             user_id=user_id,
             nickname=nickname,
-            user_text=text or "（发送了非文本消息）",
+            user_text=user_text,
             tool_context=tool_context or None,
         )
     except Exception as exc:

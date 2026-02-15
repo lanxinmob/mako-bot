@@ -53,6 +53,8 @@ python bot.py
 - `QWEATHER_HOST` `QWEATHER_KEY`
 - `GOOGLE_API_KEY` `GOOGLE_CX`
 - `AMAP_KEY`
+- 非文本识别（图片）可选：
+- `IMAGE_PROVIDER=gemini` + `GEMINI_API_KEY`（推荐）
 
 ## 典型自然对话示例
 
