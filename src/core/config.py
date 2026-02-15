@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     deepseek_base_url: str = Field(default="https://api.deepseek.com/v1", validation_alias=AliasChoices("DEEPSEEK_BASE_URL"))
     openai_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("OPENAI_API_KEY"))
     openai_base_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("OPENAI_BASE_URL"))
+    gemini_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("GEMINI_API_KEY"))
+    gemini_base_url: str = Field(
+        default="https://generativelanguage.googleapis.com/v1beta",
+        validation_alias=AliasChoices("GEMINI_BASE_URL"),
+    )
 
     # RAG / Embedding
     embedding_model: str = Field(default="moka-ai/m3e-base", validation_alias=AliasChoices("EMBEDDING_MODEL"))
@@ -62,12 +67,15 @@ class Settings(BaseSettings):
     amap_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("AMAP_KEY"))
 
     # Image
-    image_provider: Literal["openai", "stability", "none"] = Field(
+    image_provider: Literal["openai", "gemini", "stability", "none"] = Field(
         default="none", validation_alias=AliasChoices("IMAGE_PROVIDER")
     )
     image_size: str = Field(default="1024x1024", validation_alias=AliasChoices("IMAGE_SIZE"))
     vision_model: str = Field(default="gpt-4o-mini", validation_alias=AliasChoices("VISION_MODEL"))
     image_model: str = Field(default="gpt-image-1", validation_alias=AliasChoices("IMAGE_MODEL"))
+    gemini_vision_model: str = Field(
+        default="gemini-1.5-flash", validation_alias=AliasChoices("GEMINI_VISION_MODEL")
+    )
     stability_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("STABILITY_API_KEY"))
 
     # Language

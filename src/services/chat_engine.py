@@ -25,7 +25,8 @@ class ChatEngine:
     @staticmethod
     def session_key(message_type: str, user_id: int, group_id: Optional[int] = None) -> str:
         if message_type == "group" and group_id:
-            return f"group_{group_id}"
+            # Group chat context is scoped by group+user to reduce cross-user context pollution.
+            return f"group_{group_id}_user_{user_id}"
         return f"private_{user_id}"
 
     def load_profile_text(self, user_id: int) -> str:
@@ -66,8 +67,8 @@ class ChatEngine:
         reply = await self._call_llm(messages)
 
         new_history = history + [
-            {"role": "user", "content": f"【{nickname}_{user_id}】：{user_text}", "time": datetime.now().isoformat()},
-            {"role": "assistant", "content": reply, "time": datetime.now().isoformat()},
+            {"role": "user", "content": f"【{nickname}_{user_id}】：{user_text}"},
+            {"role": "assistant", "content": reply},
         ]
         self.storage.save_history(session_id, new_history)
 

@@ -14,14 +14,14 @@ class IntentDecision:
 
 
 def _extract_target_lang(text: str) -> str:
-    text_lower = text.lower()
-    if "英文" in text or "英语" in text or "english" in text_lower:
+    lower = text.lower()
+    if "英文" in text or "英语" in text or "english" in lower:
         return "EN"
-    if "日文" in text or "日语" in text or "japanese" in text_lower:
+    if "日文" in text or "日语" in text or "japanese" in lower:
         return "JA"
-    if "韩文" in text or "韩语" in text or "korean" in text_lower:
+    if "韩文" in text or "韩语" in text or "korean" in lower:
         return "KO"
-    if "中文" in text or "汉语" in text:
+    if "中文" in text or "汉语" in text or "chinese" in lower:
         return "ZH"
     return "ZH"
 
@@ -38,32 +38,39 @@ def decide_intents(
     urls = extract_urls(clean)
     face_ids = face_ids or []
 
-    if has_image and any(token in clean for token in ["看图", "图里", "这张图", "图片里", "识图"]):
+    # Image understanding: default for pure-image messages.
+    if has_image and (
+        not clean
+        or any(token in clean for token in ["看图", "图里", "这张图", "图片里", "识图", "这是什么", "帮我看看"])
+    ):
         intents.append(IntentDecision(name="image.describe", args={}))
 
     if has_image and any(token in clean for token in ["灰度", "黑白", "模糊", "缩放", "resize"]):
         operation = "grayscale" if ("灰度" in clean or "黑白" in clean) else "blur"
         if "缩放" in clean or "resize" in lower:
             operation = "resize"
-        value_match = re.search(r"(\d{2,4}[xX\*]\d{2,4}|\d{2,4})", clean)
+        value_match = re.search(r"(\d{2,4}[xX*]\d{2,4}|\d{2,4})", clean)
         intents.append(
             IntentDecision(
                 name="image.process",
-                args={
-                    "operation": operation,
-                    "value": value_match.group(1) if value_match else "",
-                },
+                args={"operation": operation, "value": value_match.group(1) if value_match else ""},
             )
         )
 
     if any(token in clean for token in ["画图", "生成图片", "来一张图", "画一张", "生成一张图"]):
-        prompt = re.sub(r"^(请|帮我|给我)?(画图|生成图片|来一张图|画一张|生成一张图)[:：]?", "", clean).strip()
+        prompt = re.sub(
+            r"^(请|帮我|给我)?(画图|生成图片|来一张图|画一张|生成一张图)[:：]?",
+            "",
+            clean,
+        ).strip()
         intents.append(IntentDecision(name="image.generate", args={"prompt": prompt or clean}))
 
     if any(token in clean for token in ["翻译", "译成", "翻成"]):
         target_lang = _extract_target_lang(clean)
         source = re.sub(r".*(翻译|译成|翻成)\s*", "", clean).strip() or clean
-        intents.append(IntentDecision(name="language.translate", args={"text": source, "target_lang": target_lang}))
+        intents.append(
+            IntentDecision(name="language.translate", args={"text": source, "target_lang": target_lang})
+        )
 
     if any(token in clean for token in ["什么语言", "语种", "language detect", "识别语言"]):
         intents.append(IntentDecision(name="language.detect", args={"text": clean}))
@@ -98,7 +105,9 @@ def decide_intents(
         payload = re.sub(r"^(改笔记|修改笔记|更新笔记)[:：]?", "", clean).strip()
         if "->" in payload:
             left, right = payload.split("->", 1)
-            intents.append(IntentDecision(name="note.update", args={"keyword": left.strip(), "content": right.strip()}))
+            intents.append(
+                IntentDecision(name="note.update", args={"keyword": left.strip(), "content": right.strip()})
+            )
 
     if any(token in clean for token in ["地图", "在哪", "周边", "路线", "怎么去", "高德"]):
         intents.append(IntentDecision(name="map.query", args={"text": clean}))
