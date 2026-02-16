@@ -17,7 +17,10 @@ from src.core.config import get_settings
 from src.services.affinity import AffinityService
 from src.services.chat_engine import ChatEngine
 from src.services.emoji import analyze_emoji
+from src.services.governance import GovernanceService
 from src.services.intent import decide_intents
+from src.services.relationship import RelationshipService
+from src.services.response_style import sanitize_persona_reply
 from src.services.tool_executor import ToolExecutor
 from src.utils.message import normalize_message
 
@@ -27,21 +30,19 @@ settings = get_settings()
 chat_engine = ChatEngine()
 tool_executor = ToolExecutor()
 affinity_service = AffinityService()
+governance = GovernanceService()
+relationship = RelationshipService()
 
 
-def _is_for_mako(event: MessageEvent, text: str) -> bool:
+def _dispatch_mode(event: MessageEvent, text: str, segment_types: list[str]) -> tuple[bool, bool]:
     if event.message_type != "group":
-        return True
-    if event.is_tome():
-        return True
+        return True, True
+    if event.is_tome() or "at" in segment_types or "reply" in segment_types:
+        return True, True
     lower = text.lower()
     if "茉子" in text or "mako" in lower:
-        return True
-    return random.random() <= settings.reply_random_chance
-
-
-def _is_non_text_directed(segment_types: list[str]) -> bool:
-    return "at" in segment_types or "reply" in segment_types
+        return True, True
+    return random.random() <= settings.reply_random_chance, False
 
 
 def _nickname(event: MessageEvent) -> str:
@@ -77,22 +78,30 @@ async def handle_chat(matcher: Matcher, event: MessageEvent) -> None:
     if not text and not normalized.segment_types:
         return
 
-    dispatch_text = text or normalized.segment_summary
-    if not _is_for_mako(event, dispatch_text):
-        if not _is_non_text_directed(normalized.segment_types):
-            return
+    should_reply, directed = _dispatch_mode(event, text or normalized.segment_summary, normalized.segment_types)
+    if not should_reply:
+        return
 
     user_id = event.user_id
-    nickname = _nickname(event)
     group_id = event.group_id if isinstance(event, GroupMessageEvent) else None
+    access = governance.can_chat(user_id, group_id)
+    if not access.allowed:
+        logger.info(f"ignored blocked message user={user_id} group={group_id} reason={access.reason}")
+        return
+
+    nickname = _nickname(event)
     session_id = chat_engine.session_key(event.message_type, user_id, group_id)
+    is_group_admin = bool(
+        isinstance(event, GroupMessageEvent) and getattr(event.sender, "role", "member") in {"admin", "owner"}
+    )
 
     image_urls = normalized.image_urls
     audio_urls = normalized.audio_urls
     face_ids = normalized.face_ids
-    user_text = normalized.build_user_text()
-    if not user_text:
-        user_text = "我发送了一条消息。"
+    user_text = normalized.build_user_text() or "我发送了一条消息。"
+
+    # Absorb relationship clues so future turns keep continuity.
+    relationship.absorb_user_message(user_id, nickname, text or user_text)
 
     emoji_result = analyze_emoji(face_ids, user_text)
     if emoji_result.affinity_delta:
@@ -111,6 +120,9 @@ async def handle_chat(matcher: Matcher, event: MessageEvent) -> None:
         image_urls=image_urls,
         audio_urls=audio_urls,
         face_ids=face_ids,
+        message_type=event.message_type,
+        group_id=group_id,
+        is_group_admin=is_group_admin,
     )
 
     base_context = normalized.segment_summary
@@ -129,14 +141,19 @@ async def handle_chat(matcher: Matcher, event: MessageEvent) -> None:
             nickname=nickname,
             user_text=user_text,
             tool_context=tool_context or None,
+            message_type=event.message_type,
+            group_id=group_id,
+            directed=directed,
         )
     except Exception as exc:
         logger.exception(f"Chat generation failed: {exc}")
-        if tool_context:
-            reply = f"茉子先把结果给你：\n{tool_context}"
-        else:
-            reply = "茉子大人脑袋有点打结了，稍后再试试。"
+        reply = "茉子大人脑袋有点打结了，稍后再试试。"
 
+    reply = sanitize_persona_reply(
+        reply,
+        directed=directed,
+        max_undirected_chars=settings.group_reply_max_chars_undirected,
+    )
     await matcher.send(_build_reply_message(event, reply, tool_result.extra_messages))
 
 

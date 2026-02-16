@@ -26,6 +26,18 @@ def _extract_target_lang(text: str) -> str:
     return "ZH"
 
 
+def _dedupe_intents(intents: List[IntentDecision]) -> List[IntentDecision]:
+    seen: set[tuple[str, tuple[tuple[str, str], ...]]] = set()
+    result: List[IntentDecision] = []
+    for intent in intents:
+        key = (intent.name, tuple(sorted(intent.args.items())))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(intent)
+    return result
+
+
 def decide_intents(
     text: str,
     has_image: bool,
@@ -79,7 +91,7 @@ def decide_intents(
         content = re.sub(r".*(念一下|读出来|语音播报|转语音)[:：]?", "", clean).strip() or clean
         intents.append(IntentDecision(name="language.tts", args={"text": content}))
 
-    if has_audio and any(token in clean for token in ["转文字", "语音转文字", "听写"]):
+    if has_audio and (not clean or any(token in clean for token in ["转文字", "语音转文字", "听写"])):
         intents.append(IntentDecision(name="language.stt", args={}))
 
     if any(token in clean for token in ["好感度", "亲密度"]):
@@ -121,4 +133,4 @@ def decide_intents(
         query = re.sub(r"^(搜索|查一下|google|最新|新闻)[:：]?", "", clean).strip() or clean
         intents.append(IntentDecision(name="search.web", args={"query": query}))
 
-    return intents
+    return _dedupe_intents(intents)

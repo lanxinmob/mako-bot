@@ -40,3 +40,20 @@ class ReminderRecord(BaseModel):
     group_id: int
     content: str
     remind_time: datetime
+
+
+RelationshipType = Literal["event", "preference", "taboo", "promise"]
+RelationshipStatus = Literal["active", "done"]
+
+
+class RelationshipMemory(BaseModel):
+    memory_id: str
+    user_id: int
+    memory_type: RelationshipType
+    content: str
+    source: str = "chat"
+    status: RelationshipStatus = "active"
+    confidence: float = 0.8
+    created_at: datetime = Field(default_factory=datetime.now)
+    due_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
