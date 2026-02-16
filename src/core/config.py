@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -98,9 +98,90 @@ class Settings(BaseSettings):
     # Chat
     max_history_turns: int = Field(default=50, validation_alias=AliasChoices("MAX_HISTORY_TURNS"))
     reply_random_chance: float = Field(default=0.001, validation_alias=AliasChoices("REPLY_RANDOM_CHANCE"))
+    tool_timeout_seconds: float = Field(
+        default=25.0,
+        validation_alias=AliasChoices("TOOL_TIMEOUT_SECONDS"),
+    )
+    tool_max_concurrency: int = Field(default=3, validation_alias=AliasChoices("TOOL_MAX_CONCURRENCY"))
+    tool_enable_list: Optional[str] = Field(default=None, validation_alias=AliasChoices("TOOL_ENABLE_LIST"))
+    tool_disable_list: Optional[str] = Field(default=None, validation_alias=AliasChoices("TOOL_DISABLE_LIST"))
+    group_tool_enable_list: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("GROUP_TOOL_ENABLE_LIST")
+    )
+    group_tool_disable_list: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("GROUP_TOOL_DISABLE_LIST")
+    )
+    private_tool_enable_list: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("PRIVATE_TOOL_ENABLE_LIST")
+    )
+    private_tool_disable_list: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("PRIVATE_TOOL_DISABLE_LIST")
+    )
+    admin_only_tool_list: Optional[str] = Field(
+        default="note.delete,note.update",
+        validation_alias=AliasChoices("ADMIN_ONLY_TOOL_LIST"),
+    )
+    plugin_enable_list: Optional[str] = Field(default=None, validation_alias=AliasChoices("PLUGIN_ENABLE_LIST"))
+
+    # Governance / Permission
+    admin_user_ids: Optional[str] = Field(default=None, validation_alias=AliasChoices("ADMIN_USER_IDS"))
+    blacklist_user_ids: Optional[str] = Field(default=None, validation_alias=AliasChoices("BLACKLIST_USER_IDS"))
+    blacklist_group_ids: Optional[str] = Field(default=None, validation_alias=AliasChoices("BLACKLIST_GROUP_IDS"))
+    group_reply_max_chars_undirected: int = Field(
+        default=60, validation_alias=AliasChoices("GROUP_REPLY_MAX_CHARS_UNDIRECTED")
+    )
+
+    # Cost control
+    cost_control_enabled: bool = Field(default=True, validation_alias=AliasChoices("COST_CONTROL_ENABLED"))
+    daily_cost_limit_global: float = Field(default=3.0, validation_alias=AliasChoices("DAILY_COST_LIMIT_GLOBAL"))
+    daily_cost_limit_user: float = Field(default=0.3, validation_alias=AliasChoices("DAILY_COST_LIMIT_USER"))
+    llm_cost_per_1k_chars_input: float = Field(
+        default=0.0015, validation_alias=AliasChoices("LLM_COST_PER_1K_CHARS_INPUT")
+    )
+    llm_cost_per_1k_chars_output: float = Field(
+        default=0.0020, validation_alias=AliasChoices("LLM_COST_PER_1K_CHARS_OUTPUT")
+    )
+    tool_cost_overrides: Optional[str] = Field(default=None, validation_alias=AliasChoices("TOOL_COST_OVERRIDES"))
+
+    # Proactive follow-up
+    proactive_enabled: bool = Field(default=True, validation_alias=AliasChoices("PROACTIVE_ENABLED"))
+    proactive_scan_minutes: int = Field(default=20, validation_alias=AliasChoices("PROACTIVE_SCAN_MINUTES"))
+    proactive_default_hours: int = Field(default=24, validation_alias=AliasChoices("PROACTIVE_DEFAULT_HOURS"))
 
     def build_redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+    @staticmethod
+    def parse_name_list(raw: Optional[str]) -> List[str]:
+        if not raw:
+            return []
+        return [item.strip() for item in raw.split(",") if item.strip()]
+
+    @staticmethod
+    def parse_int_list(raw: Optional[str]) -> List[int]:
+        values: List[int] = []
+        for item in Settings.parse_name_list(raw):
+            try:
+                values.append(int(item))
+            except ValueError:
+                continue
+        return values
+
+    @staticmethod
+    def parse_cost_overrides(raw: Optional[str]) -> Dict[str, float]:
+        result: Dict[str, float] = {}
+        if not raw:
+            return result
+        for pair in raw.split(","):
+            if ":" not in pair:
+                continue
+            key, value = pair.split(":", 1)
+            key = key.strip()
+            try:
+                result[key] = float(value.strip())
+            except ValueError:
+                continue
+        return result
 
 
 @lru_cache
