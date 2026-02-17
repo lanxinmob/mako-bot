@@ -34,13 +34,27 @@ governance = GovernanceService()
 relationship = RelationshipService()
 
 
-def _dispatch_mode(event: MessageEvent, text: str, segment_types: list[str]) -> tuple[bool, bool]:
+def _is_at_self(event: MessageEvent, message: Message) -> bool:
+    self_id = str(getattr(event, "self_id", "")).strip()
+    if not self_id:
+        return False
+    for seg in message:
+        if seg.type != "at":
+            continue
+        qq = str((seg.data or {}).get("qq", "")).strip()
+        if qq == self_id:
+            return True
+    return False
+
+
+def _dispatch_mode(event: MessageEvent, text: str, raw_message: Message) -> tuple[bool, bool]:
     if event.message_type != "group":
         return True, True
-    if event.is_tome() or "at" in segment_types or "reply" in segment_types:
+    # Directed only when this bot is explicitly targeted.
+    if _is_at_self(event, raw_message):
         return True, True
     lower = text.lower()
-    if "茉子" in text or "mako" in lower:
+    if any(token in text for token in ("\u8309\u5b50", "\u5e38\u9646\u8309\u5b50")) or "mako" in lower:
         return True, True
     return random.random() <= settings.reply_random_chance, False
 
@@ -78,7 +92,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent) -> None:
     if not text and not normalized.segment_types:
         return
 
-    should_reply, directed = _dispatch_mode(event, text or normalized.segment_summary, normalized.segment_types)
+    should_reply, directed = _dispatch_mode(event, text or normalized.segment_summary, raw_message)
     if not should_reply:
         return
 
@@ -100,7 +114,6 @@ async def handle_chat(matcher: Matcher, event: MessageEvent) -> None:
     face_ids = normalized.face_ids
     user_text = normalized.build_user_text() or "我发送了一条消息。"
 
-    # Absorb relationship clues so future turns keep continuity.
     relationship.absorb_user_message(user_id, nickname, text or user_text)
 
     emoji_result = analyze_emoji(face_ids, user_text)
@@ -131,7 +144,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent) -> None:
         tool_context = f"[原始消息段]\n{base_context}\n\n{tool_context}".strip()
     if emoji_result.labels:
         labels = "、".join(emoji_result.labels)
-        extra_context = f"表情情绪识别：{labels}，sentiment={emoji_result.sentiment}"
+        extra_context = f"表情情绪识别: {labels}, sentiment={emoji_result.sentiment}"
         tool_context = f"{tool_context}\n{extra_context}".strip()
 
     try:
