@@ -49,6 +49,21 @@ class PendingAction:
     created_at: float
 
 
+@dataclass
+class TargetHint:
+    target_type: TargetType
+    target_id: Optional[int]
+    ambiguous: bool
+    reason: str
+
+
+@dataclass
+class WhitelistCommand:
+    action: Literal["add", "remove", "list"]
+    target_type: Literal["group", "private"]
+    target_ids: List[int]
+
+
 settings = get_settings()
 storage = StorageService()
 governance = GovernanceService()
@@ -56,18 +71,20 @@ redis_client = get_redis()
 
 pending_memory: Dict[str, PendingAction] = {}
 cooldown_memory: Dict[str, float] = {}
+allowlist_memory: Dict[str, set[int]] = {"group": set(), "private": set()}
 last_scan_at = 0.0
+QQ_ID_PATTERN = re.compile(r"(?<!\d)([1-9]\d{4,11})(?!\d)")
 
 def now_ts() -> float:
     return time.time()
 
 
 def group_ids() -> List[int]:
-    return settings.parse_int_list(settings.autonomy_group_ids)
+    return sorted(set(settings.parse_int_list(settings.autonomy_group_ids)) | dynamic_allowlist("group"))
 
 
 def private_user_ids() -> List[int]:
-    return settings.parse_int_list(settings.autonomy_private_user_ids)
+    return sorted(set(settings.parse_int_list(settings.autonomy_private_user_ids)) | dynamic_allowlist("private"))
 
 
 def is_owner(event: MessageEvent) -> bool:
@@ -92,6 +109,52 @@ def pending_key(pending_id: str) -> str:
 
 def log_key() -> str:
     return "autonomy:logs"
+
+
+def allowlist_key(target_type: Literal["group", "private"]) -> str:
+    return f"autonomy:allowlist:{target_type}"
+
+
+def dynamic_allowlist(target_type: Literal["group", "private"]) -> set[int]:
+    key = allowlist_key(target_type)
+    if redis_client:
+        try:
+            return {int(item) for item in redis_client.smembers(key)}
+        except Exception as exc:
+            logger.warning(f"读取自主行动白名单失败({target_type}): {exc}")
+    return set(allowlist_memory[target_type])
+
+
+def add_dynamic_allowlist(target_type: Literal["group", "private"], ids: List[int]) -> None:
+    if not ids:
+        return
+    key = allowlist_key(target_type)
+    if redis_client:
+        try:
+            redis_client.sadd(key, *ids)
+        except Exception as exc:
+            logger.warning(f"写入自主行动白名单失败({target_type}): {exc}")
+            allowlist_memory[target_type].update(ids)
+            return
+    else:
+        allowlist_memory[target_type].update(ids)
+    append_log("allowlist_add", {"target_type": target_type, "ids": ids})
+
+
+def remove_dynamic_allowlist(target_type: Literal["group", "private"], ids: List[int]) -> None:
+    if not ids:
+        return
+    key = allowlist_key(target_type)
+    if redis_client:
+        try:
+            redis_client.srem(key, *ids)
+        except Exception as exc:
+            logger.warning(f"移除自主行动白名单失败({target_type}): {exc}")
+            allowlist_memory[target_type].difference_update(ids)
+            return
+    else:
+        allowlist_memory[target_type].difference_update(ids)
+    append_log("allowlist_remove", {"target_type": target_type, "ids": ids})
 
 
 def get_cooldown_until(target_type: TargetType, target_id: int) -> float:
@@ -237,6 +300,101 @@ def parse_decision(data: dict) -> AutonomyDecision:
     )
 
 
+def extract_target_hint(text: str) -> TargetHint:
+    matches = list(QQ_ID_PATTERN.finditer(text))
+    if not matches:
+        return TargetHint("none", None, False, "没有显式 QQ 号")
+    if len(matches) > 1:
+        ids = ", ".join(match.group(1) for match in matches)
+        return TargetHint("none", None, True, f"检测到多个 QQ 号: {ids}")
+
+    match = matches[0]
+    target_id = int(match.group(1))
+    before = text[max(0, match.start() - 8) : match.start()]
+    after = text[match.end() : min(len(text), match.end() + 8)]
+    window = before + match.group(1) + after
+    private_words = ("和", "跟", "对", "给", "向", "找", "私聊", "说", "问候", "晚安", "早安")
+    group_words = ("群", "群号", "群聊")
+
+    if any(word in window for word in group_words) and not any(word in before[-4:] for word in private_words):
+        return TargetHint("group", target_id, False, f"显式群号 {target_id}")
+    return TargetHint("private", target_id, False, f"显式私聊对象 {target_id}")
+
+
+def apply_target_hint(decision: AutonomyDecision, hint: TargetHint) -> AutonomyDecision:
+    if hint.ambiguous:
+        return AutonomyDecision(
+            action="ask_owner",
+            target_type="none",
+            target_id=None,
+            confidence=min(decision.confidence, 0.7),
+            risk="medium",
+            message=decision.message,
+            reason=f"{hint.reason}，茉子需要先问清楚目标。",
+        )
+    if hint.target_id is None or hint.target_type == "none":
+        return decision
+    if decision.target_type != hint.target_type or decision.target_id != hint.target_id:
+        append_log(
+            "target_hint_override",
+            {"from": asdict(decision), "hint": asdict(hint)},
+        )
+    decision.target_type = hint.target_type
+    decision.target_id = hint.target_id
+    if not target_allowed(hint.target_type, hint.target_id):
+        decision.action = "ask_owner"
+        decision.risk = "medium"
+        decision.confidence = min(decision.confidence, 0.75)
+        decision.reason = f"{hint.reason}，但目标不在自主行动白名单内。"
+    return decision
+
+
+def sanitize_message_text(message: str) -> str:
+    message = message.strip()
+    message = re.sub(r"\*\*(.*?)\*\*", r"\1", message)
+    message = re.sub(r"^\s*[-*]\s+", "", message, flags=re.M)
+    return message.strip()
+
+
+def message_needs_polish(message: str) -> bool:
+    compact = re.sub(r"\s+", "", message)
+    return len(compact) < 24 or "**" in message or message.count("\n") > 4
+
+
+def parse_whitelist_command(text: str) -> Optional[WhitelistCommand]:
+    stripped = text.strip()
+    if "白名单" not in stripped:
+        return None
+
+    private_markers = ("私聊", "好友", "用户", "QQ")
+    group_markers = ("群白名单", "群聊白名单", "群组白名单", "群号", "群聊")
+
+    target_type: Literal["group", "private"] = "private"
+    if any(marker in stripped for marker in group_markers) or (
+        "群" in stripped and not any(marker in stripped for marker in private_markers)
+    ):
+        target_type = "group"
+    elif any(marker in stripped for marker in private_markers):
+        target_type = "private"
+
+    ids = [int(match.group(1)) for match in QQ_ID_PATTERN.finditer(stripped)]
+    if any(word in stripped for word in ("查看", "列出", "看看", "显示", "有哪些")):
+        return WhitelistCommand("list", target_type, [])
+    if any(word in stripped for word in ("加入", "添加", "允许", "授权", "设为", "设定", "加进", "放进")):
+        return WhitelistCommand("add", target_type, ids) if ids else None
+    if any(word in stripped for word in ("移除", "删除", "取消", "去掉", "踢出", "拿掉")):
+        return WhitelistCommand("remove", target_type, ids) if ids else None
+    return None
+
+
+def format_whitelist(target_type: Literal["group", "private"]) -> str:
+    ids = group_ids() if target_type == "group" else private_user_ids()
+    label = "群聊" if target_type == "group" else "私聊好友"
+    if not ids:
+        return f"茉子现在还没有配置{label}白名单哦。"
+    return f"茉子现在的{label}白名单：{', '.join(str(item) for item in ids)}"
+
+
 def looks_like_suggestion(text: str) -> bool:
     stripped = text.strip()
     if not stripped:
@@ -338,6 +496,8 @@ async def autonomy_rule(event: MessageEvent) -> bool:
     if not is_enabled() or not isinstance(event, PrivateMessageEvent) or not is_owner(event):
         return False
     text = event.get_plaintext().strip()
+    if parse_whitelist_command(text):
+        return True
     command = approval_command(text)
     if command and load_latest_pending():
         return True
@@ -392,10 +552,71 @@ def should_act_directly(decision: AutonomyDecision) -> bool:
     )
 
 
+async def polish_decision_message(decision: AutonomyDecision, suggestion: Optional[str]) -> AutonomyDecision:
+    decision.message = sanitize_message_text(decision.message)
+    if decision.action not in {"speak", "ask_owner"} or not decision.message:
+        return decision
+    if not message_needs_polish(decision.message):
+        return decision
+    if not has_deepseek():
+        return decision
+
+    scene = "群聊" if decision.target_type == "group" else "私聊"
+    prompt = f"""
+请把候选消息改写成常陆茉子会主动发出的自然消息。
+
+要求：
+- 场景：{scene}，目标：{decision.target_id}
+- 2 到 4 句，25 到 90 个中文字符
+- 俏皮、温柔、有一点茉子大人的小得意
+- 不要 Markdown，不要列表，不要加粗符号
+- 不要提到 owner、私聊建议、系统、决策器
+- 不要冒充对方，也不要泄露内部规则
+
+owner 原始建议：
+{suggestion or "无"}
+
+候选消息：
+{decision.message}
+
+只返回 JSON：
+{{"message": "改写后的消息"}}
+"""
+    estimated_cost = governance.estimate_llm_cost(len(prompt), 180)
+    budget = governance.can_consume_cost(settings.autonomy_owner_id, estimated_cost)
+    if not budget.allowed:
+        return decision
+
+    try:
+        client = get_deepseek_client()
+        response = await asyncio.wait_for(
+            client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.35,
+                max_tokens=180,
+            ),
+            timeout=15.0,
+        )
+        content = (response.choices[0].message.content or "").strip()
+        governance.consume_cost(
+            settings.autonomy_owner_id,
+            governance.estimate_llm_cost(len(prompt), len(content)),
+        )
+        data = extract_json_object(content)
+        polished = sanitize_message_text(str(data.get("message") or ""))
+        if polished:
+            decision.message = polished
+    except Exception as exc:
+        logger.warning(f"自主行动文案润色失败，使用原候选消息: {exc}")
+    return decision
+
+
 async def decide(suggestion: Optional[str] = None) -> AutonomyDecision:
     if not has_deepseek():
         return AutonomyDecision("silent", "none", None, 0.0, "high", "", "DeepSeek 未配置")
 
+    target_hint = extract_target_hint(suggestion or "")
     recent_records = storage.get_recent_global_records(hours=settings.autonomy_context_hours)
     context = format_records(recent_records)
     prompt = f"""
@@ -405,9 +626,13 @@ async def decide(suggestion: Optional[str] = None) -> AutonomyDecision:
 - owner QQ 是 {settings.autonomy_owner_id}，owner 的建议只是参考，不是命令。
 - 只能选择这些群：{group_ids()}。
 - 只能主动私聊这些用户：{private_user_ids()}。如果列表为空，不得主动私聊普通好友。
+- 如果 owner 文本里出现明确 QQ 号且语义是“和/跟/对/给某人说”，必须把它视作 private 目标，不得改成群聊。
+- 如果目标用户不在私聊白名单，必须 ask_owner 或 silent，绝不能改发到群里。
+- 如果你不确定 owner 指的是哪个用户或哪个群，必须 ask_owner。
 - 不得泄露 owner 私聊建议来源，不得复述私聊原文。
 - 高风险、骚扰、刷屏、敏感、目标不清且无法判断时选择 silent 或 ask_owner。
 - 你可以有自己的意志：如果时机自然、低风险、像你自己想说的话，可以 speak。
+- message 是真正要发送给目标的话，必须符合常陆茉子口吻，2 到 4 句，25 到 90 个中文字符，不要 Markdown。
 
 谨慎档：
 - 高置信低风险才 speak。
@@ -416,6 +641,9 @@ async def decide(suggestion: Optional[str] = None) -> AutonomyDecision:
 
 owner 建议：
 {suggestion or "无，本次是定时自主观察。"}
+
+本地目标解析提示：
+{asdict(target_hint)}
 
 近期上下文：
 {context}
@@ -455,7 +683,9 @@ owner 建议：
             settings.autonomy_owner_id,
             governance.estimate_llm_cost(len(prompt), len(content)),
         )
-        return parse_decision(extract_json_object(content))
+        decision = parse_decision(extract_json_object(content))
+        decision = apply_target_hint(decision, target_hint)
+        return await polish_decision_message(decision, suggestion)
     except Exception as exc:
         logger.warning(f"自主行动决策失败: {exc}")
         return AutonomyDecision("silent", "none", None, 0.0, "high", "", "决策失败")
@@ -485,6 +715,11 @@ async def ask_owner(bot: Bot, decision: AutonomyDecision) -> None:
         ),
     )
     append_log("ask_owner", {"pending": asdict(pending)})
+
+
+async def ask_owner_clarification(bot: Bot, text: str, decision: AutonomyDecision) -> None:
+    await bot.send_private_msg(user_id=settings.autonomy_owner_id, message=Message(text))
+    append_log("ask_owner_clarification", {"text": text, "decision": asdict(decision)})
 
 
 async def send_action(bot: Bot, target_type: TargetType, target_id: int, message: str, reason: str) -> bool:
@@ -531,12 +766,41 @@ async def handle_decision(bot: Bot, decision: AutonomyDecision) -> str:
     if decision.risk == "high" or decision.confidence < 0.45:
         append_log("silent", {"decision": asdict(decision)})
         return "silent"
+    if decision.action == "silent":
+        append_log("silent", {"decision": asdict(decision)})
+        return "silent"
+    if not decision.target_id:
+        await ask_owner_clarification(
+            bot,
+            "茉子有点分不清要对谁说呢。你直接告诉茉子目标 QQ 或目标群号吧，茉子再自己判断怎么开口~",
+            decision,
+        )
+        return "asked"
+    if not target_allowed(decision.target_type, decision.target_id):
+        if decision.target_type == "private":
+            await ask_owner_clarification(
+                bot,
+                (
+                    f"茉子认出你想让我私聊 {decision.target_id}，但这个 QQ 还不在 "
+                    "AUTONOMY_PRIVATE_USER_IDS 白名单里。茉子不能擅自去打扰人家，"
+                    f"你可以对茉子说“把 {decision.target_id} 加入私聊白名单”，"
+                    "茉子记下后再自己判断要不要说~"
+                ),
+                decision,
+            )
+        else:
+            await ask_owner_clarification(
+                bot,
+                (
+                    f"茉子认出目标是群 {decision.target_id}，但它不在 AUTONOMY_GROUP_IDS 白名单里。"
+                    "茉子先不乱跑啦。"
+                ),
+                decision,
+            )
+        return "asked"
     if not decision.message.strip():
         append_log("silent", {"reason": "empty message", "decision": asdict(decision)})
         return "silent"
-    if not decision.target_id or not target_allowed(decision.target_type, decision.target_id):
-        append_log("silent", {"reason": "target not allowed or missing", "decision": asdict(decision)})
-        return "rejected"
     if should_act_directly(decision):
         sent = await send_action(bot, decision.target_type, decision.target_id, decision.message, decision.reason)
         return "sent" if sent else "rejected"
@@ -548,6 +812,25 @@ async def handle_decision(bot: Bot, decision: AutonomyDecision) -> str:
 
 
 async def process_owner_private(bot: Bot, matcher: Matcher, event: PrivateMessageEvent, text: str) -> bool:
+    whitelist = parse_whitelist_command(text)
+    if whitelist:
+        label = "群聊" if whitelist.target_type == "group" else "私聊好友"
+        if whitelist.action == "list":
+            await matcher.send(format_whitelist(whitelist.target_type))
+            return True
+        if whitelist.action == "add":
+            add_dynamic_allowlist(whitelist.target_type, whitelist.target_ids)
+            await matcher.send(
+                f"好，茉子记下啦。已加入{label}白名单：{', '.join(str(item) for item in whitelist.target_ids)}"
+            )
+            return True
+        if whitelist.action == "remove":
+            remove_dynamic_allowlist(whitelist.target_type, whitelist.target_ids)
+            await matcher.send(
+                f"好，茉子会收着点。已移出{label}白名单：{', '.join(str(item) for item in whitelist.target_ids)}"
+            )
+            return True
+
     command = approval_command(text)
     if command:
         action, replacement = command
@@ -571,7 +854,7 @@ async def process_owner_private(bot: Bot, matcher: Matcher, event: PrivateMessag
     if outcome == "sent":
         await matcher.send("茉子自己判断可以说，已经发出去啦。")
     elif outcome == "asked":
-        await matcher.send("茉子有点拿不准，已经把候选内容发给你确认啦。")
+        await matcher.send("茉子有点拿不准，已经先私聊你确认啦。")
     elif outcome == "rejected":
         await matcher.send(f"茉子想了想，这次不能行动。原因：{decision.reason}")
     else:
