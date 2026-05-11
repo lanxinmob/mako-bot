@@ -148,6 +148,18 @@ class Settings(BaseSettings):
     proactive_scan_minutes: int = Field(default=20, validation_alias=AliasChoices("PROACTIVE_SCAN_MINUTES"))
     proactive_default_hours: int = Field(default=24, validation_alias=AliasChoices("PROACTIVE_DEFAULT_HOURS"))
 
+    # Autonomy
+    autonomy_enabled: bool = Field(default=True, validation_alias=AliasChoices("AUTONOMY_ENABLED"))
+    autonomy_owner_id: int = Field(default=1724461496, validation_alias=AliasChoices("AUTONOMY_OWNER_ID"))
+    autonomy_group_ids: Optional[str] = Field(default="984928242", validation_alias=AliasChoices("AUTONOMY_GROUP_IDS"))
+    autonomy_private_user_ids: Optional[str] = Field(default=None, validation_alias=AliasChoices("AUTONOMY_PRIVATE_USER_IDS"))
+    autonomy_scan_minutes: int = Field(default=10, validation_alias=AliasChoices("AUTONOMY_SCAN_MINUTES"))
+    autonomy_cooldown_seconds: int = Field(default=600, validation_alias=AliasChoices("AUTONOMY_COOLDOWN_SECONDS"))
+    autonomy_dm_cooldown_seconds: int = Field(default=3600, validation_alias=AliasChoices("AUTONOMY_DM_COOLDOWN_SECONDS"))
+    autonomy_pending_ttl_seconds: int = Field(default=1800, validation_alias=AliasChoices("AUTONOMY_PENDING_TTL_SECONDS"))
+    autonomy_context_hours: int = Field(default=2, validation_alias=AliasChoices("AUTONOMY_CONTEXT_HOURS"))
+    autonomy_context_limit: int = Field(default=30, validation_alias=AliasChoices("AUTONOMY_CONTEXT_LIMIT"))
+
     def build_redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 

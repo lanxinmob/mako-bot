@@ -10,11 +10,11 @@ from nonebot.log import logger
 from nonebot_plugin_apscheduler import scheduler
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment
 import json
-import redis
 from datetime import datetime
 from dotenv import load_dotenv
 import hashlib
 from src.plugins import vector_db
+from src.services.redis import get_redis
 load_dotenv()
 
 def generate_job_id(group_id: int, user_id: int, remind_time: datetime):
@@ -26,13 +26,36 @@ user_reminders: Dict[str, List[Dict[str, Any]]] = {}
 chat_histories: Dict[str, List[dict]] = {}
 MAX_HISTORY_TURNS = 50
 
-try:
-    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-    redis_client.ping() 
-    logger.success("成功连接到Redis，聊天记录将持久化！")
-except redis.exceptions.ConnectionError as e:
-    logger.error(f"连接Redis失败！将使用内存模式。错误: {e}")
-    redis_client = None 
+redis_client = get_redis()
+
+def safe_redis_get(key: str):
+    if not redis_client:
+        return None
+    try:
+        return redis_client.get(key)
+    except Exception as exc:
+        logger.warning(f"Redis 读取失败({key}): {exc}")
+        return None
+
+def safe_redis_set(key: str, value: str) -> bool:
+    if not redis_client:
+        return False
+    try:
+        redis_client.set(key, value)
+        return True
+    except Exception as exc:
+        logger.warning(f"Redis 写入失败({key}): {exc}")
+        return False
+
+def safe_redis_rpush(key: str, value: str) -> bool:
+    if not redis_client:
+        return False
+    try:
+        redis_client.rpush(key, value)
+        return True
+    except Exception as exc:
+        logger.warning(f"Redis 列表写入失败({key}): {exc}")
+        return False
 
 """deepseek"""
 from openai import AsyncOpenAI
@@ -150,7 +173,7 @@ async def send_group_reminder(group_id: int, session_id: str, job_id: str, msg: 
     
 
 @chat_handler.handle()
-async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
+async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
     #sender_nickname = event.sender.card or event.sender.nickname 
     raw_message = event.get_message()
     
@@ -185,7 +208,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
         "time": time
     }
     key = "all_memory"
-    redis_client.rpush(key,json.dumps(user_record))
+    safe_redis_rpush(key, json.dumps(user_record, ensure_ascii=False))
     # user_message = event.get_plaintext().strip()
     #if not user_message: return
     
@@ -300,13 +323,13 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
         return
     
     def get_chat_history(session_id: str):
-        history_json =  redis_client.get(session_id)
+        history_json = safe_redis_get(session_id)
         if history_json:
             try:
                 return json.loads(history_json)
             except Exception:
-                return []
-        return []
+                return chat_histories.get(session_id, [])
+        return chat_histories.get(session_id, [])
     
     user_history =  get_chat_history(session_id) 
     """"
@@ -338,7 +361,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
         await matcher.send(Message("哼哼，茉子大人今天有点累了，不想理你~ (´-ω-`)"))
     """
     def get_user_profile(user_id:str):
-        profile = redis_client.get(f"user_profile:{user_id}")
+        profile = safe_redis_get(f"user_profile:{user_id}")
         if profile:
             try:
                 return json.loads(profile)
@@ -421,18 +444,16 @@ async def handle_chat(matcher: Matcher, event: MessageEvent,bot=Bot):
         new_history = messages_for_api[1:] 
         new_history.append({"role": "assistant", "content": reply_text,"time":time})
 
-        if redis_client:
-            new_history = new_history[-MAX_HISTORY_TURNS * 2:]
-            redis_client.set(session_id, json.dumps(new_history))
-        else:
-            chat_histories[session_id] = new_history[-MAX_HISTORY_TURNS * 2:]
+        new_history = new_history[-MAX_HISTORY_TURNS * 2:]
+        if not safe_redis_set(session_id, json.dumps(new_history, ensure_ascii=False)):
+            chat_histories[session_id] = new_history
         
         my_record = {
             "role": "assistant", "content": reply_text,
             "group_id": getattr(event, "group_id", None),
             "time": time
         }
-        redis_client.rpush(key,json.dumps(my_record))
+        safe_redis_rpush(key, json.dumps(my_record, ensure_ascii=False))
 
         logger.success(f"已回复: {reply_text[:50]}...")
         
