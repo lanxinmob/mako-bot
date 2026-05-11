@@ -249,12 +249,76 @@ def looks_like_suggestion(text: str) -> bool:
         "你想不想",
         "你可以",
         "去群里",
+        "在群里",
+        "群里",
         "跟他说",
         "跟她说",
         "私聊",
         "主动",
     )
-    return any(keyword in stripped for keyword in keywords)
+    if any(keyword in stripped for keyword in keywords):
+        return True
+
+    target_words = ("群", "大家", "朋友", "好友", "同学", "他们", "她们")
+    action_words = ("说", "发", "问", "提醒", "告诉", "安慰", "关心", "问候", "晚安", "早安", "吐槽")
+    return any(target in stripped for target in target_words) and any(
+        action in stripped for action in action_words
+    )
+
+
+async def is_autonomy_suggestion(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if not has_deepseek():
+        return looks_like_suggestion(stripped)
+
+    prompt = f"""
+判断下面这条 owner 私聊是否是在邀请常陆茉子采取“对外社交行动”。
+
+“对外社交行动”包括：
+- 让茉子自己判断要不要去某个群说话
+- 让茉子自己判断要不要主动私聊某个白名单好友
+- 让茉子在群里/对大家/对某人问候、提醒、安慰、吐槽、说晚安或早安
+
+不是“对外社交行动”的情况：
+- 普通聊天，只希望茉子直接回复 owner
+- 问知识、问代码、问配置、闲聊
+- 情绪倾诉但没有要求茉子去对外说话
+- owner 只是描述别人，没有邀请茉子行动
+
+只返回 JSON：
+{{"is_autonomy": true, "reason": "简短理由"}}
+
+owner 私聊内容：
+{stripped}
+"""
+    estimated_cost = governance.estimate_llm_cost(len(prompt), 120)
+    budget = governance.can_consume_cost(settings.autonomy_owner_id, estimated_cost)
+    if not budget.allowed:
+        return looks_like_suggestion(stripped)
+
+    try:
+        client = get_deepseek_client()
+        response = await asyncio.wait_for(
+            client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=120,
+            ),
+            timeout=15.0,
+        )
+        content = (response.choices[0].message.content or "").strip()
+        governance.consume_cost(
+            settings.autonomy_owner_id,
+            governance.estimate_llm_cost(len(prompt), len(content)),
+        )
+        data = extract_json_object(content)
+        return bool(data.get("is_autonomy"))
+    except Exception as exc:
+        logger.warning(f"自主行动意图识别失败，使用关键词兜底: {exc}")
+        return looks_like_suggestion(stripped)
 
 
 def approval_command(text: str) -> Optional[tuple[str, Optional[str]]]:
@@ -277,7 +341,7 @@ async def autonomy_rule(event: MessageEvent) -> bool:
     command = approval_command(text)
     if command and load_latest_pending():
         return True
-    return looks_like_suggestion(text)
+    return await is_autonomy_suggestion(text)
 
 
 autonomy_handler = on_message(rule=autonomy_rule, priority=9, block=True)
@@ -502,19 +566,17 @@ async def process_owner_private(bot: Bot, matcher: Matcher, event: PrivateMessag
         await matcher.send("发出去啦。" if sent else "这次没发出去，目标或冷却规则没通过。")
         return True
 
-    if looks_like_suggestion(text):
-        decision = await decide(suggestion=text)
-        outcome = await handle_decision(bot, decision)
-        if outcome == "sent":
-            await matcher.send("茉子自己判断可以说，已经发出去啦。")
-        elif outcome == "asked":
-            await matcher.send("茉子有点拿不准，已经把候选内容发给你确认啦。")
-        elif outcome == "rejected":
-            await matcher.send(f"茉子想了想，这次不能行动。原因：{decision.reason}")
-        else:
-            await matcher.send(f"茉子想了想，这次先不行动。原因：{decision.reason}")
-        return True
-    return False
+    decision = await decide(suggestion=text)
+    outcome = await handle_decision(bot, decision)
+    if outcome == "sent":
+        await matcher.send("茉子自己判断可以说，已经发出去啦。")
+    elif outcome == "asked":
+        await matcher.send("茉子有点拿不准，已经把候选内容发给你确认啦。")
+    elif outcome == "rejected":
+        await matcher.send(f"茉子想了想，这次不能行动。原因：{decision.reason}")
+    else:
+        await matcher.send(f"茉子想了想，这次先不行动。原因：{decision.reason}")
+    return True
 
 
 @autonomy_handler.handle()
