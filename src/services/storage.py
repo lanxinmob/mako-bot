@@ -110,9 +110,9 @@ class StorageService:
         key = f"user_profile:{user_id}"
         if self.redis:
             raw = self.redis.get(key)
-            return json.loads(raw) if raw else None
+            return self._parse_profile_payload(raw, key=key) if raw else None
         raw = _memory.profiles.get(key)
-        return json.loads(raw) if raw else None
+        return self._parse_profile_payload(raw, key=key) if raw else None
 
     def set_profile(self, user_id: int, nickname: str, profile_text: str) -> None:
         key = f"user_profile:{user_id}"
@@ -131,19 +131,36 @@ class StorageService:
     def list_profiles(self) -> List[dict]:
         if self.redis:
             keys = self.redis.keys("user_profile:*")
-            rows = [self.redis.get(key) for key in keys]
+            rows = [(str(key), self.redis.get(key)) for key in keys]
         else:
-            rows = list(_memory.profiles.values())
+            rows = list(_memory.profiles.items())
         profiles: List[dict] = []
-        for raw in rows:
+        for key, raw in rows:
             if not raw:
                 continue
-            try:
-                profiles.append(json.loads(raw))
-            except Exception:
-                continue
+            profile = self._parse_profile_payload(raw, key=key)
+            if profile:
+                profiles.append(profile)
         profiles.sort(key=lambda x: x.get("last_updated", ""), reverse=True)
         return profiles
+
+    @staticmethod
+    def _parse_profile_payload(raw: str, *, key: str = "") -> Optional[dict]:
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = {"profile_text": raw}
+        if not isinstance(parsed, dict):
+            parsed = {"profile_text": str(parsed)}
+        if "user_id" not in parsed and key.startswith("user_profile:"):
+            try:
+                parsed["user_id"] = int(key.split(":", 1)[1])
+            except (IndexError, ValueError):
+                pass
+        parsed.setdefault("nickname", f"用户 {parsed.get('user_id', '')}".strip())
+        parsed.setdefault("profile_text", "")
+        parsed.setdefault("last_updated", "")
+        return parsed
 
     def save_bot_profile(self, profile: BotProfile) -> BotProfile:
         profile.updated_at = datetime.now()
@@ -192,9 +209,10 @@ class StorageService:
         rows: List[str]
         if self.redis:
             rows = self.redis.hvals("bot_profiles")
-            mako = self.redis.get("bot_profile:mako")
-            if mako:
-                rows.append(mako)
+            for key in self.redis.keys("bot_profile:*"):
+                item = self.redis.get(key)
+                if item:
+                    rows.append(item)
         else:
             rows = [json.dumps(item, ensure_ascii=False) for item in _memory.bot_profiles.values()]
         profiles: List[BotProfile] = []
@@ -303,6 +321,32 @@ class StorageService:
                         continue
         notes.sort(key=lambda x: x.updated_at, reverse=True)
         return notes[:limit]
+
+    def list_long_term_memory_points(self, limit: int = 200) -> List[dict]:
+        if not self.redis:
+            return []
+        points: List[dict] = []
+        try:
+            keys = self.redis.keys(f"{self.settings.vector_prefix}*")
+        except Exception:
+            return []
+        for key in keys[:limit]:
+            try:
+                text = self.redis.hget(key, "point_text")
+            except Exception:
+                continue
+            if not text:
+                continue
+            points.append(
+                {
+                    "id": str(key).removeprefix(self.settings.vector_prefix),
+                    "title": "长期记忆",
+                    "content": text,
+                    "category": "long_term_memory",
+                    "source": "vector_store",
+                }
+            )
+        return points
 
     def search_notes(self, user_id: int, keyword: str) -> List[NoteRecord]:
         notes = self.list_notes(user_id)
