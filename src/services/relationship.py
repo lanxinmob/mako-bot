@@ -37,6 +37,34 @@ class RelationshipService:
             self._sync_profile(user_id=user_id, nickname=nickname)
             for memory in created:
                 self._sync_note(memory)
+            self._append_progress_event(
+                "relationship_memories_created",
+                "从聊天中抽取并保存关系记忆。",
+                {
+                    "user_id": user_id,
+                    "nickname": nickname,
+                    "memory_count": len(created),
+                    "memory_types": [memory.memory_type for memory in created],
+                    "text_preview": text[:160],
+                },
+            )
+            self._append_thought_trace(
+                "relationship_extraction",
+                "关系记忆抽取完成；仅保存命中的类型和摘要，不保存隐藏推理链。",
+                {
+                    "user_id": user_id,
+                    "memory_count": len(created),
+                    "memories": [
+                        {
+                            "memory_id": memory.memory_id,
+                            "memory_type": memory.memory_type,
+                            "content_preview": memory.content[:160],
+                            "confidence": memory.confidence,
+                        }
+                        for memory in created
+                    ],
+                },
+            )
         return created
 
     def build_memory_brief(self, user_id: int, limit_each: int = 3) -> str:
@@ -67,7 +95,42 @@ class RelationshipService:
         return self.storage.list_due_followups(limit=limit)
 
     def mark_done(self, user_id: int, memory_id: str) -> bool:
-        return self.storage.mark_relationship_done(user_id, memory_id)
+        done = self.storage.mark_relationship_done(user_id, memory_id)
+        if done:
+            self._append_progress_event(
+                "relationship_memory_done",
+                "关系记忆跟进项已标记完成。",
+                {"user_id": user_id, "memory_id": memory_id},
+            )
+        return done
+
+    def _append_progress_event(self, event_type: str, summary: str, payload: dict) -> None:
+        method = getattr(self.storage, "append_progress_event", None)
+        if callable(method):
+            method(
+                {
+                    "type": "AutonomyProgressEvent",
+                    "source": "relationship",
+                    "event_type": event_type,
+                    "summary": summary,
+                    "payload": payload,
+                    "created_at": datetime.now().isoformat(),
+                }
+            )
+
+    def _append_thought_trace(self, trace_type: str, summary: str, payload: dict) -> None:
+        method = getattr(self.storage, "append_thought_trace", None)
+        if callable(method):
+            method(
+                {
+                    "type": "ThoughtTrace",
+                    "source": "relationship",
+                    "trace_type": trace_type,
+                    "summary": summary,
+                    "payload": payload,
+                    "created_at": datetime.now().isoformat(),
+                }
+            )
 
     def _create(
         self,

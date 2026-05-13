@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 import hashlib
 from src.plugins import vector_db
 from src.services.redis import get_redis
+from src.services.storage import StorageService
 load_dotenv()
 
 def generate_job_id(group_id: int, user_id: int, remind_time: datetime):
@@ -27,6 +28,45 @@ chat_histories: Dict[str, List[dict]] = {}
 MAX_HISTORY_TURNS = 50
 
 redis_client = get_redis()
+audit_storage = StorageService()
+
+def append_progress_event(event_type: str, summary: str, payload: Dict[str, Any]) -> None:
+    method = getattr(audit_storage, "append_progress_event", None)
+    if not callable(method):
+        logger.warning("StorageService.append_progress_event is not available; chat progress event skipped.")
+        return
+    try:
+        method(
+            {
+                "type": "AutonomyProgressEvent",
+                "source": "chat",
+                "event_type": event_type,
+                "summary": summary,
+                "payload": payload,
+                "created_at": datetime.now().isoformat(),
+            }
+        )
+    except Exception as exc:
+        logger.warning(f"写入聊天进展事件失败: {exc}")
+
+def append_thought_trace(trace_type: str, summary: str, payload: Dict[str, Any]) -> None:
+    method = getattr(audit_storage, "append_thought_trace", None)
+    if not callable(method):
+        logger.warning("StorageService.append_thought_trace is not available; chat thought trace skipped.")
+        return
+    try:
+        method(
+            {
+                "type": "ThoughtTrace",
+                "source": "chat",
+                "trace_type": trace_type,
+                "summary": summary,
+                "payload": payload,
+                "created_at": datetime.now().isoformat(),
+            }
+        )
+    except Exception as exc:
+        logger.warning(f"写入聊天思考摘要失败: {exc}")
 
 def safe_redis_get(key: str):
     if not redis_client:
@@ -209,6 +249,16 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
     }
     key = "all_memory"
     safe_redis_rpush(key, json.dumps(user_record, ensure_ascii=False))
+    append_progress_event(
+        "message_received",
+        "收到聊天消息并写入全局记忆。",
+        {
+            "user_id": event.user_id,
+            "group_id": getattr(event, "group_id", None),
+            "is_tome": event.is_tome(),
+            "message_preview": user_message[:120],
+        },
+    )
     # user_message = event.get_plaintext().strip()
     #if not user_message: return
     
@@ -406,6 +456,17 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
         )
         reply_text = response.choices[0].message.content.strip()
         reply_content = reply_text
+        append_thought_trace(
+            "chat_reply_generated",
+            "DeepSeek 生成普通聊天回复；仅保存输入/输出摘要，不保存隐藏推理链。",
+            {
+                "user_id": event.user_id,
+                "group_id": getattr(event, "group_id", None),
+                "model": "deepseek-chat",
+                "input_preview": user_message[:120],
+                "reply_preview": reply_text[:160],
+            },
+        )
 
         if isinstance(event, GroupMessageEvent):
 
@@ -454,6 +515,15 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
             "time": time
         }
         safe_redis_rpush(key, json.dumps(my_record, ensure_ascii=False))
+        append_progress_event(
+            "reply_sent",
+            "聊天回复已发送并写入全局记忆。",
+            {
+                "user_id": event.user_id,
+                "group_id": getattr(event, "group_id", None),
+                "reply_preview": reply_text[:160],
+            },
+        )
 
         logger.success(f"已回复: {reply_text[:50]}...")
         
