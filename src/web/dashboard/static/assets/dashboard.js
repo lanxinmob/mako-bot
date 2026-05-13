@@ -3,16 +3,47 @@
   const TOKEN_KEY = 'mako.dashboard.token';
 
   const fallbackSummary = {
-    progress: { percent: 0, label: '等待新的修行卷轴', streak: '未开始', updated_at: '' },
-    mako_profile: { name: '茉子', title: '见习忍者手账员', mood: '安静观察中', traits: ['轻步', '认真', '会把碎片整理成地图'] },
-    goals: [],
+    progress: { percent: 0, label: '等待工作台数据', streak: '未开始', updated_at: '' },
     recent_progress: [],
     notes: [],
-    user_profile: { name: '旅人', focus: '还没有写入档案', preferences: [] },
-    thinking_summary: ''
+    people: [],
+    relationship_memories: [],
+    mako_profile: { name: '茉子', title: 'Owner 工作台助手', mood: '待命', traits: ['整理线索', '跟进路线图'] },
+    thought_traces: [],
+    roadmap_tasks: [],
+    roadmap_groups: [],
+    user_profile: { name: 'Owner', focus: '还没有写入档案', preferences: [] },
+    goals: [],
+    tasks: [],
+    raw: null
   };
 
-  const $ = (id) => document.getElementById(id);
+  const navItems = [
+    ['overview', '总览'],
+    ['memory', '记忆'],
+    ['people', '人物'],
+    ['thinking', '思考'],
+    ['roadmap', '路线图']
+  ];
+
+  const statusOptions = [
+    ['all', '全部状态'],
+    ['todo', '未开始'],
+    ['doing', '进行中'],
+    ['done', '已完成'],
+    ['blocked', '受阻']
+  ];
+
+  const root = document.getElementById('dashboard-root');
+  let state = {
+    summary: fallbackSummary,
+    loading: false,
+    error: '',
+    token: getInitialToken(),
+    active: 'overview',
+    query: '',
+    status: 'all'
+  };
 
   function asArray(value) {
     if (!value) return [];
@@ -21,7 +52,9 @@
 
   function text(value) {
     if (value === null || value === undefined) return '';
-    return String(value);
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    return value.title || value.name || value.label || value.summary || value.content || JSON.stringify(value);
   }
 
   function getInitialToken() {
@@ -34,204 +67,371 @@
     return localStorage.getItem(TOKEN_KEY) || '';
   }
 
-  function normalizeTask(task, index) {
+  function normalizeStatus(value, done) {
+    const raw = String(value || '').toLowerCase();
+    if (done || ['done', 'complete', 'completed', 'finished'].includes(raw)) return 'done';
+    if (['doing', 'in_progress', 'active', 'working', 'running'].includes(raw)) return 'doing';
+    if (['blocked', 'stuck', 'paused', 'waiting'].includes(raw)) return 'blocked';
+    return 'todo';
+  }
+
+  function normalizeTask(task, index = 0, group = '') {
     if (typeof task === 'string') {
-      return { id: `task-${index}`, title: task, done: false, children: [] };
+      return { id: `task-${index}`, title: task, status: 'todo', done: false, children: [], group };
     }
+    const done = Boolean(task.done || task.completed || task.status === 'done');
+    const status = normalizeStatus(task.status || task.state, done);
     return {
-      id: task.id || task.key || `task-${index}`,
+      id: task.id || task.key || `${group || 'task'}-${index}`,
       title: task.title || task.name || task.label || '未命名任务',
-      done: Boolean(task.done || task.completed || task.status === 'done'),
-      progress: task.progress,
-      children: asArray(task.children || task.tasks || task.items).map(normalizeTask)
+      summary: task.summary || task.description || task.detail || task.body || '',
+      status,
+      done: status === 'done',
+      progress: task.progress ?? task.percent,
+      owner: task.owner || task.assignee || '',
+      due: task.due || task.due_at || task.date || '',
+      group,
+      children: asArray(task.children || task.tasks || task.items).map((child, childIndex) => normalizeTask(child, childIndex, group))
     };
+  }
+
+  function normalizePerson(person, index) {
+    if (typeof person === 'string') return { id: `person-${index}`, name: person, role: '', notes: [] };
+    return {
+      id: person.id || person.key || `person-${index}`,
+      name: person.name || person.nickname || person.title || `人物 ${index + 1}`,
+      role: person.role || person.relationship || person.label || `QQ ${person.user_id || ''}`.trim(),
+      summary: person.summary || person.description || person.focus || '',
+      profile_text: person.profile_text || person.profile || person.body || '',
+      preferences: asArray(person.preferences),
+      notes: asArray(person.notes || person.memories || person.tags),
+      relationship_memories: asArray(person.relationship_memories || person.relationships),
+      memory_count: Number(person.memory_count || 0),
+      last_updated: person.last_updated || person.updated_at || ''
+    };
+  }
+
+  function normalizeNote(note, index, type = 'note') {
+    if (typeof note === 'string') return { id: `${type}-${index}`, title: `${type === 'memory' ? '记忆' : '笔记'} ${index + 1}`, body: note, tags: [] };
+    return {
+      id: note.id || note.key || `${type}-${index}`,
+      title: note.title || note.topic || note.name || `${type === 'memory' ? '记忆' : '笔记'} ${index + 1}`,
+      body: note.body || note.text || note.content || note.summary || '',
+      date: note.date || note.created_at || note.updated_at || note.time || '',
+      tags: asArray(note.tags || note.keywords || note.people || note.category),
+      source: note.source || type
+    };
+  }
+
+  function normalizeRoadmapGroups(source) {
+    const groups = asArray(source.roadmap_groups || source.groups);
+    if (groups.length) {
+      return groups.map((group, index) => {
+        if (typeof group === 'string') return { id: `group-${index}`, title: group, tasks: [] };
+        return {
+          id: group.id || group.key || `group-${index}`,
+          title: group.title || group.name || group.label || `阶段 ${index + 1}`,
+          summary: group.summary || group.description || '',
+          tasks: asArray(group.tasks || group.items).map((task, taskIndex) => normalizeTask(task, taskIndex, group.title || group.name || ''))
+        };
+      });
+    }
+    const oldGoals = asArray(source.goals || source.tasks || source.task_tree).map((task, index) => normalizeTask(task, index, '旧任务'));
+    return oldGoals.length ? [{ id: 'legacy', title: '旧任务', tasks: oldGoals }] : [];
   }
 
   function normalizeSummary(data) {
     const source = (data && data.data) || data || {};
+    const roadmapGroups = normalizeRoadmapGroups(source);
+    const roadmapTasks = asArray(source.roadmap_tasks || source.tasks || source.goals || source.task_tree).map((task, index) => normalizeTask(task, index));
     return {
       ...fallbackSummary,
       ...source,
       progress: { ...fallbackSummary.progress, ...(source.progress || source.total_progress || {}) },
       mako_profile: { ...fallbackSummary.mako_profile, ...(source.mako_profile || source.mako || {}) },
-      goals: asArray(source.goals || source.tasks || source.task_tree).map(normalizeTask),
-      recent_progress: asArray(source.recent_progress || source.recent || source.timeline),
-      notes: asArray(source.notes),
       user_profile: { ...fallbackSummary.user_profile, ...(source.user_profile || source.user || {}) },
-      thinking_summary: source.thinking_summary || source.thoughts || source.summary || ''
+      notes: asArray(source.memory_notes || source.notes).map((note, index) => normalizeNote(note, index)),
+      people: asArray(source.people).map(normalizePerson),
+      relationship_memories: asArray(source.relationship_memories || source.memories).map((note, index) => normalizeNote(note, index, 'memory')),
+      thought_traces: asArray(source.thought_traces || source.thinking_summary || source.thoughts || source.summary).map((note, index) => normalizeNote(note, index, 'thought')),
+      roadmap_tasks: roadmapTasks,
+      roadmap_groups: roadmapGroups,
+      goals: roadmapTasks,
+      raw: source.raw || source
     };
   }
 
-  function emptyState(title, body) {
-    const node = document.createElement('div');
-    node.className = 'empty-state';
-    node.innerHTML = '<span class="shuriken">✦</span>';
-    const strong = document.createElement('strong');
-    strong.textContent = title;
-    const p = document.createElement('p');
-    p.textContent = body;
-    node.append(strong, p);
+  function getPercent(summary) {
+    const progress = summary.progress || {};
+    return Math.max(0, Math.min(100, Number(progress.percent ?? progress.value ?? progress.total) || 0));
+  }
+
+  function matchesQuery(item) {
+    const query = state.query.trim().toLowerCase();
+    if (!query) return true;
+    return text(item).toLowerCase().includes(query) || JSON.stringify(item).toLowerCase().includes(query);
+  }
+
+  function matchesStatus(task) {
+    return state.status === 'all' || task.status === state.status;
+  }
+
+  function h(tag, props = {}, children = []) {
+    const node = document.createElement(tag);
+    Object.entries(props || {}).forEach(([key, value]) => {
+      if (value === false || value === null || value === undefined) return;
+      if (key === 'className') node.className = value;
+      else if (key === 'text') node.textContent = value;
+      else if (key === 'html') node.innerHTML = value;
+      else if (key.startsWith('on')) node.addEventListener(key.slice(2).toLowerCase(), value);
+      else node.setAttribute(key, value === true ? '' : value);
+    });
+    asArray(children).forEach((child) => node.append(child instanceof Node ? child : document.createTextNode(text(child))));
     return node;
   }
 
-  function renderTaskNode(node) {
-    const li = document.createElement('li');
-    li.className = 'task-node';
-    const row = document.createElement('div');
-    row.className = 'task-row';
-
-    const mark = document.createElement('b');
-    mark.className = node.done ? 'done' : 'todo';
-    mark.textContent = node.done ? '✓' : '○';
-
-    const title = document.createElement('span');
-    title.textContent = node.title;
-
-    row.append(mark, title);
-    if (node.progress !== undefined) {
-      const progress = document.createElement('em');
-      progress.textContent = `${node.progress}%`;
-      row.append(progress);
-    }
-    li.append(row);
-
-    if (node.children && node.children.length) {
-      const ul = document.createElement('ul');
-      node.children.forEach((child) => ul.append(renderTaskNode(child)));
-      li.append(ul);
-    }
-
-    return li;
+  function card(title, body, meta = '') {
+    return h('article', { className: 'work-card' }, [
+      h('div', { className: 'card-head' }, [
+        h('strong', { text: title }),
+        meta ? h('span', { text: meta }) : ''
+      ]),
+      body ? h('p', { text: body }) : ''
+    ]);
   }
 
-  function renderSummary(summary) {
+  function emptyState(message) {
+    return h('div', { className: 'empty-state', text: message });
+  }
+
+  function renderDetail(title, summary, bodyNode, meta = '') {
+    const details = h('details', { className: 'detail-card' }, [
+      h('summary', {}, [
+        h('span', {}, [h('strong', { text: title }), summary ? h('small', { text: summary }) : '']),
+        meta ? h('em', { text: meta }) : ''
+      ]),
+      bodyNode
+    ]);
+    return details;
+  }
+
+  function renderTasks(tasks) {
+    const filtered = tasks.filter((task) => matchesQuery(task) && matchesStatus(task));
+    if (!filtered.length) return emptyState('没有匹配当前筛选的任务。');
+    return h('div', { className: 'task-list' }, filtered.map((task) => {
+      const meta = [task.owner, task.due, task.progress !== undefined ? `${task.progress}%` : ''].filter(Boolean).join(' · ');
+      const body = h('div', { className: 'detail-body' }, [
+        task.summary ? h('p', { text: task.summary }) : h('p', { text: '暂无详情。' }),
+        task.children.length ? renderTasks(task.children) : ''
+      ]);
+      return renderDetail(task.title, task.group || statusLabel(task.status), body, meta || statusLabel(task.status));
+    }));
+  }
+
+  function statusLabel(status) {
+    return ({ todo: '未开始', doing: '进行中', done: '已完成', blocked: '受阻' })[status] || '未开始';
+  }
+
+  function renderOverview(summary) {
     const progress = summary.progress || {};
-    const percent = Math.max(0, Math.min(100, Number(progress.percent ?? progress.value ?? progress.total) || 0));
     const mako = summary.mako_profile || {};
-    const user = summary.user_profile || {};
-
-    $('progress-label').textContent = progress.label || '把目标、笔记和思考线索收进同一本卷轴。';
-    $('progress-value').textContent = percent;
-    $('progress-ring').style.setProperty('--progress', `${percent * 3.6}deg`);
-    $('progress-ring').setAttribute('aria-label', `总进度 ${percent}%`);
-    $('progress-streak').textContent = progress.streak || '今日静候任务';
-    $('progress-updated').textContent = progress.updated_at ? `更新于 ${progress.updated_at}` : '卷轴边缘还留着空白';
-
-    $('mako-name').textContent = mako.name || '茉子';
-    $('mako-title').textContent = mako.title || mako.role || '见习忍者手账员';
-    $('mako-mood').textContent = mako.mood || mako.status || '安静观察中';
-    $('mako-traits').textContent = asArray(mako.traits || mako.tags).join(' / ') || '暂无';
-
-    const taskTree = $('task-tree');
-    taskTree.replaceChildren();
-    if (summary.goals && summary.goals.length) {
-      const ul = document.createElement('ul');
-      ul.className = 'task-tree';
-      summary.goals.forEach((goal) => ul.append(renderTaskNode(goal)));
-      taskTree.append(ul);
-    } else {
-      taskTree.append(emptyState('任务卷轴未展开', '茉子已经磨好墨，等第一枚目标落在纸上。'));
-    }
-
-    const recent = $('recent-progress');
-    recent.replaceChildren();
-    if (summary.recent_progress && summary.recent_progress.length) {
-      const ol = document.createElement('ol');
-      ol.className = 'timeline';
-      summary.recent_progress.forEach((item) => {
-        const li = document.createElement('li');
-        const time = document.createElement('time');
-        time.textContent = item.time || item.date || item.created_at || '刚刚';
-        const span = document.createElement('span');
-        span.textContent = item.title || item.text || item.content || text(item);
-        li.append(time, span);
-        ol.append(li);
-      });
-      recent.append(ol);
-    } else {
-      recent.append(emptyState('脚印还很浅', '完成一点点也算数，茉子会帮你记住。'));
-    }
-
-    const notes = $('notes');
-    notes.replaceChildren();
-    if (summary.notes && summary.notes.length) {
-      const stack = document.createElement('div');
-      stack.className = 'note-stack';
-      summary.notes.forEach((note, index) => {
-        const article = document.createElement('article');
-        article.className = 'note';
-        const title = document.createElement('strong');
-        title.textContent = note.title || note.topic || `手账 ${index + 1}`;
-        const body = document.createElement('p');
-        body.textContent = note.body || note.text || note.content || text(note);
-        article.append(title, body);
-        stack.append(article);
-      });
-      notes.append(stack);
-    } else {
-      notes.append(emptyState('纸页暂时清亮', '没有笔记时，茉子会把空白也收拾得很整齐。'));
-    }
-
-    $('user-name').textContent = user.name || user.nickname || '旅人';
-    $('user-focus').textContent = user.focus || user.current_focus || '还没有写入档案';
-    $('user-preferences').textContent = asArray(user.preferences || user.tags).join(' / ') || '暂无';
-
-    const thinking = $('thinking-summary');
-    thinking.replaceChildren();
-    if (summary.thinking_summary) {
-      const p = document.createElement('p');
-      p.className = 'thinking-copy';
-      p.textContent = summary.thinking_summary;
-      thinking.append(p);
-    } else {
-      thinking.append(emptyState('思路正在潜行', '等摘要抵达，茉子会把它折成一张清楚的忍者便签。'));
-    }
+    const recent = summary.recent_progress.filter(matchesQuery).slice(0, 6);
+    return [
+      h('section', { className: 'hero-panel' }, [
+        h('div', {}, [
+          h('p', { className: 'eyebrow', text: 'OWNER WORKBENCH' }),
+          h('h1', { text: '茉子 Owner 工作台' }),
+          h('p', { className: 'hero-copy', text: progress.label || '总览记忆、人物、思考与路线图，把零散线索收成可推进的下一步。' })
+        ]),
+        h('div', { className: 'hero-stat' }, [
+          h('span', { text: `${getPercent(summary)}%` }),
+          h('small', { text: progress.streak || '总进度' })
+        ])
+      ]),
+      h('section', { className: 'metric-grid' }, [
+        metric('笔记', summary.notes.length),
+        metric('人物', summary.people.length),
+        metric('思考', summary.thought_traces.length),
+        metric('任务', summary.roadmap_tasks.length || summary.roadmap_groups.reduce((sum, group) => sum + group.tasks.length, 0))
+      ]),
+      h('section', { className: 'content-grid' }, [
+        h('div', { className: 'panel span-7' }, [
+          h('div', { className: 'section-title' }, [h('h2', { text: '最近进展' })]),
+          recent.length ? h('ol', { className: 'timeline' }, recent.map((item) => h('li', {}, [
+            h('time', { text: item.time || item.date || item.created_at || '刚刚' }),
+            h('span', { text: item.title || item.text || item.content || text(item) })
+          ]))) : emptyState('暂无最近进展。')
+        ]),
+        h('div', { className: 'panel span-5' }, [
+          h('div', { className: 'section-title' }, [h('h2', { text: '茉子档案' })]),
+          h('dl', { className: 'compact-list' }, [
+            row('名字', mako.name || '茉子'),
+            row('状态', mako.mood || mako.status || '待命'),
+            row('阶段', mako.current_stage || mako.title || '自主意志 v1 修行中'),
+            row('价值', asArray(mako.values || mako.traits || mako.tags).join(' / ') || '暂无'),
+            row('边界', asArray(mako.boundaries).join(' / ') || '暂无'),
+            row('心理画像', asArray(mako.psychological_snapshot).join('；') || mako.summary || '暂无')
+          ])
+        ])
+      ])
+    ];
   }
 
-  function setError(message) {
-    const error = $('error-text');
-    if (!message) {
-      error.hidden = true;
-      error.textContent = '';
-      return;
-    }
-    error.hidden = false;
-    error.textContent = message;
+  function metric(label, value) {
+    return h('div', { className: 'metric' }, [h('strong', { text: value }), h('span', { text: label })]);
+  }
+
+  function row(label, value) {
+    return h('div', {}, [h('dt', { text: label }), h('dd', { text: value })]);
+  }
+
+  function renderMemory(summary) {
+    const notes = summary.notes.filter(matchesQuery);
+    const memories = summary.relationship_memories.filter(matchesQuery);
+    return h('section', { className: 'content-grid' }, [
+      h('div', { className: 'panel span-6' }, [
+        h('div', { className: 'section-title' }, [h('h2', { text: '笔记' })]),
+        notes.length ? h('div', { className: 'card-stack' }, notes.map((note) => card(
+          note.title,
+          note.body,
+          [note.source, note.date].filter(Boolean).join(' · ')
+        ))) : emptyState('没有匹配的笔记。')
+      ]),
+      h('div', { className: 'panel span-6' }, [
+        h('div', { className: 'section-title' }, [h('h2', { text: '关系记忆' })]),
+        memories.length ? h('div', { className: 'card-stack' }, memories.map((memory) => card(memory.title, memory.body, memory.date))) : emptyState('没有匹配的关系记忆。')
+      ])
+    ]);
+  }
+
+  function renderPeople(summary) {
+    const people = summary.people.filter(matchesQuery);
+    return h('section', { className: 'panel' }, [
+      h('div', { className: 'section-title' }, [h('h2', { text: '人物' })]),
+      people.length ? h('div', { className: 'people-grid' }, people.map((person) => renderDetail(
+        person.name,
+        [person.role, person.last_updated ? `更新 ${person.last_updated}` : '', person.memory_count ? `${person.memory_count} 条关系记忆` : ''].filter(Boolean).join(' · ') || '未标注关系',
+        h('div', { className: 'detail-body' }, [
+          h('p', { text: person.summary || '暂无人物摘要。' }),
+          person.profile_text ? h('pre', { className: 'profile-text', text: person.profile_text }) : '',
+          person.preferences.length ? h('div', { className: 'tag-row' }, person.preferences.map((tag) => h('span', { text: text(tag) }))) : '',
+          person.notes.length ? h('div', { className: 'tag-row' }, person.notes.map((tag) => h('span', { text: text(tag) }))) : '',
+          person.relationship_memories.length ? h('div', { className: 'mini-list' }, person.relationship_memories.map((memory) => h('span', {
+            text: `${memory.type || '记忆'}：${memory.content || memory.body || text(memory)}`
+          }))) : ''
+        ])
+      ))) : emptyState('没有匹配的人物。')
+    ]);
+  }
+
+  function renderThinking(summary) {
+    const traces = summary.thought_traces.filter(matchesQuery);
+    return h('section', { className: 'panel' }, [
+      h('div', { className: 'section-title' }, [h('h2', { text: '思考轨迹' })]),
+      traces.length ? h('div', { className: 'card-stack' }, traces.map((trace) => renderDetail(
+        trace.title,
+        trace.date || '思考记录',
+        h('div', { className: 'detail-body' }, [h('p', { text: trace.body || '暂无详情。' })])
+      ))) : emptyState('没有匹配的思考轨迹。')
+    ]);
+  }
+
+  function renderRoadmap(summary) {
+    const groups = summary.roadmap_groups.length ? summary.roadmap_groups : [{ title: '路线图', tasks: summary.roadmap_tasks }];
+    return h('section', { className: 'roadmap-grid' }, groups.map((group) => h('div', { className: 'panel' }, [
+      h('div', { className: 'section-title' }, [
+        h('h2', { text: group.title }),
+        h('p', { text: `${group.done || 0}/${group.total || (group.tasks || []).length} · ${group.progress || 0}%` })
+      ]),
+      group.summary ? h('p', { className: 'group-summary', text: group.summary }) : '',
+      renderTasks(group.tasks || [])
+    ])));
+  }
+
+  function renderMain() {
+    const summary = state.summary;
+    if (state.active === 'memory') return renderMemory(summary);
+    if (state.active === 'people') return renderPeople(summary);
+    if (state.active === 'thinking') return renderThinking(summary);
+    if (state.active === 'roadmap') return renderRoadmap(summary);
+    return renderOverview(summary);
+  }
+
+  function render() {
+    const percent = getPercent(state.summary);
+    root.replaceChildren(
+      h('header', { className: 'topbar' }, [
+        h('div', { className: 'brand' }, [h('strong', { text: 'Mako' }), h('span', { text: 'Owner 工作台' })]),
+        h('nav', { className: 'nav-tabs', 'aria-label': '工作台导航' }, navItems.map(([key, label]) => h('button', {
+          type: 'button',
+          className: key === state.active ? 'active' : '',
+          text: label,
+          onClick: () => { state.active = key; render(); }
+        }))),
+        h('div', { className: 'token-row' }, [
+          h('input', {
+            value: state.token,
+            placeholder: 'Bearer token',
+            'aria-label': 'Dashboard token',
+            onInput: (event) => {
+              state.token = event.target.value.trim();
+              if (state.token) localStorage.setItem(TOKEN_KEY, state.token);
+              else localStorage.removeItem(TOKEN_KEY);
+            }
+          }),
+          h('button', { type: 'button', text: state.loading ? '读取中' : '刷新', disabled: state.loading, onClick: loadSummary })
+        ])
+      ]),
+      h('section', { className: 'toolbar' }, [
+        h('label', { className: 'search-box' }, [
+          h('span', { text: '搜索' }),
+          h('input', {
+            value: state.query,
+            placeholder: '搜索笔记、人物、任务、思考',
+            onInput: (event) => { state.query = event.target.value; render(); }
+          })
+        ]),
+        h('label', { className: 'status-filter' }, [
+          h('span', { text: '任务状态' }),
+          h('select', { onChange: (event) => { state.status = event.target.value; render(); } },
+            statusOptions.map(([value, label]) => h('option', { value, text: label, selected: value === state.status }))
+          )
+        ])
+      ]),
+      state.error ? h('p', { className: 'error-text', text: state.error }) : '',
+      h('div', { className: 'view-stack' }, renderMain()),
+      h('footer', { className: 'progress-dock', 'aria-label': `总进度 ${percent}%` }, [
+        h('div', {}, [h('strong', { text: '总进度' }), h('span', { text: state.summary.progress.updated_at ? `更新于 ${state.summary.progress.updated_at}` : '等待更新' })]),
+        h('div', { className: 'dock-track' }, [h('i', { style: `width: ${percent}%` })]),
+        h('b', { text: `${percent}%` })
+      ])
+    );
   }
 
   async function loadSummary() {
-    const token = $('token-input').value.trim();
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-
-    if (!token) {
-      setError('把 token 放进 URL query，或在本机 localStorage 写入 mako.dashboard.token。');
-      renderSummary(fallbackSummary);
+    if (!state.token) {
+      state.error = '把 token 放进 URL query，或在本机 localStorage 写入 mako.dashboard.token。';
+      state.summary = fallbackSummary;
+      render();
       return;
     }
-
-    $('reload-button').disabled = true;
-    $('reload-button').querySelector('span').textContent = '读取中';
-    setError('');
-
+    state.loading = true;
+    state.error = '';
+    render();
     try {
-      const response = await fetch(API_URL, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!response.ok) throw new Error(`卷轴读取失败：HTTP ${response.status}`);
+      const response = await fetch(API_URL, { headers: { Authorization: `Bearer ${state.token}` } });
+      if (!response.ok) throw new Error(`工作台读取失败：HTTP ${response.status}`);
       const payload = await response.json();
-      renderSummary(normalizeSummary(payload));
+      state.summary = normalizeSummary(payload);
     } catch (error) {
-      renderSummary(fallbackSummary);
-      setError(error.message || '卷轴读取失败');
+      state.summary = fallbackSummary;
+      state.error = error.message || '工作台读取失败';
     } finally {
-      $('reload-button').disabled = false;
-      $('reload-button').querySelector('span').textContent = '刷新';
+      state.loading = false;
+      render();
     }
   }
 
-  $('token-input').value = getInitialToken();
-  $('reload-button').addEventListener('click', loadSummary);
-  renderSummary(fallbackSummary);
+  render();
   loadSummary();
 })();
