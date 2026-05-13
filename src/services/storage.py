@@ -7,7 +7,16 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from src.core.config import get_settings
-from src.models.schemas import ChatRecord, NoteRecord, RelationshipMemory
+from src.models.schemas import (
+    AutonomyGoal,
+    AutonomyProgressEvent,
+    AutonomyTask,
+    BotProfile,
+    ChatRecord,
+    NoteRecord,
+    RelationshipMemory,
+    ThoughtTrace,
+)
 from src.services.redis import get_redis
 
 
@@ -17,6 +26,11 @@ class MemoryStorage:
     all_memory: List[str] = field(default_factory=list)
     profiles: Dict[str, str] = field(default_factory=dict)
     notes: Dict[int, Dict[str, dict]] = field(default_factory=dict)
+    bot_profiles: Dict[str, dict] = field(default_factory=dict)
+    thought_traces: Dict[str, dict] = field(default_factory=dict)
+    autonomy_goals: Dict[str, dict] = field(default_factory=dict)
+    autonomy_tasks: Dict[str, dict] = field(default_factory=dict)
+    autonomy_progress_events: Dict[str, dict] = field(default_factory=dict)
     affinity: Dict[int, int] = field(default_factory=dict)
     affinity_daily: Dict[str, int] = field(default_factory=dict)
     relationship_memories: Dict[int, Dict[str, dict]] = field(default_factory=dict)
@@ -60,6 +74,21 @@ class StorageService:
             return
         _memory.all_memory.append(payload)
 
+    def list_global_records(self, limit: int = 100) -> List[ChatRecord]:
+        rows: List[str]
+        if self.redis:
+            rows = self.redis.lrange("all_memory", -limit, -1) if limit > 0 else self.redis.lrange("all_memory", 0, -1)
+        else:
+            rows = _memory.all_memory[-limit:] if limit > 0 else _memory.all_memory
+        records: List[ChatRecord] = []
+        for item in rows:
+            try:
+                records.append(ChatRecord.model_validate_json(item))
+            except Exception:
+                continue
+        records.sort(key=lambda x: x.time, reverse=True)
+        return records
+
     def get_recent_global_records(self, hours: int = 24) -> List[ChatRecord]:
         threshold = datetime.now().timestamp() - hours * 3600
         rows: List[str]
@@ -98,6 +127,91 @@ class StorageService:
             self.redis.set(key, raw)
             return
         _memory.profiles[key] = raw
+
+    def list_profiles(self) -> List[dict]:
+        if self.redis:
+            keys = self.redis.keys("user_profile:*")
+            rows = [self.redis.get(key) for key in keys]
+        else:
+            rows = list(_memory.profiles.values())
+        profiles: List[dict] = []
+        for raw in rows:
+            if not raw:
+                continue
+            try:
+                profiles.append(json.loads(raw))
+            except Exception:
+                continue
+        profiles.sort(key=lambda x: x.get("last_updated", ""), reverse=True)
+        return profiles
+
+    def save_bot_profile(self, profile: BotProfile) -> BotProfile:
+        profile.updated_at = datetime.now()
+        payload = json.dumps(profile.model_dump(mode="json"), ensure_ascii=False)
+        if self.redis:
+            self.redis.hset("bot_profiles", profile.profile_id, payload)
+            self.redis.set(f"bot_profile:{profile.profile_id}", payload)
+            return profile
+        _memory.bot_profiles[profile.profile_id] = profile.model_dump(mode="json")
+        return profile
+
+    def add_bot_profile(
+        self,
+        name: str,
+        *,
+        summary: str = "",
+        persona: str = "",
+        capabilities: Optional[List[str]] = None,
+        limitations: Optional[List[str]] = None,
+        status: str = "active",
+    ) -> BotProfile:
+        profile = BotProfile(
+            profile_id=uuid.uuid4().hex[:12],
+            name=name,
+            summary=summary,
+            persona=persona,
+            capabilities=capabilities or [],
+            limitations=limitations or [],
+            status=status,  # type: ignore[arg-type]
+        )
+        return self.save_bot_profile(profile)
+
+    def get_bot_profile(self, profile_id: str) -> Optional[BotProfile]:
+        if self.redis:
+            raw = self.redis.get(f"bot_profile:{profile_id}") or self.redis.hget("bot_profiles", profile_id)
+            if not raw:
+                return None
+            try:
+                return BotProfile.model_validate_json(raw)
+            except Exception:
+                return None
+        data = _memory.bot_profiles.get(profile_id)
+        return BotProfile.model_validate(data) if data else None
+
+    def list_bot_profiles(self, *, status: Optional[str] = None, limit: int = 50) -> List[BotProfile]:
+        rows: List[str]
+        if self.redis:
+            rows = self.redis.hvals("bot_profiles")
+            mako = self.redis.get("bot_profile:mako")
+            if mako:
+                rows.append(mako)
+        else:
+            rows = [json.dumps(item, ensure_ascii=False) for item in _memory.bot_profiles.values()]
+        profiles: List[BotProfile] = []
+        seen: set[str] = set()
+        for row in rows:
+            try:
+                profile = BotProfile.model_validate_json(row)
+            except Exception:
+                continue
+            if profile.profile_id in seen:
+                continue
+            seen.add(profile.profile_id)
+            if status and profile.status != status:
+                continue
+            profiles.append(profile)
+        profiles.sort(key=lambda x: x.updated_at, reverse=True)
+        return profiles[:limit]
 
     def get_affinity(self, user_id: int) -> int:
         initial = self.settings.affinity_initial
@@ -170,6 +284,25 @@ class StorageService:
         notes = [NoteRecord.model_validate(item) for item in data.values()]
         notes.sort(key=lambda x: x.updated_at, reverse=True)
         return notes
+
+    def list_all_notes(self, limit: int = 200) -> List[NoteRecord]:
+        notes: List[NoteRecord] = []
+        if self.redis:
+            for key in self.redis.keys("notes:*"):
+                for item in self.redis.hvals(key):
+                    try:
+                        notes.append(NoteRecord.model_validate_json(item))
+                    except Exception:
+                        continue
+        else:
+            for user_notes in _memory.notes.values():
+                for item in user_notes.values():
+                    try:
+                        notes.append(NoteRecord.model_validate(item))
+                    except Exception:
+                        continue
+        notes.sort(key=lambda x: x.updated_at, reverse=True)
+        return notes[:limit]
 
     def search_notes(self, user_id: int, keyword: str) -> List[NoteRecord]:
         notes = self.list_notes(user_id)
@@ -303,6 +436,427 @@ class StorageService:
         data["last_used_at"] = datetime.now().isoformat()
         _memory.relationship_followups.pop(memory_id, None)
         return True
+
+    def list_all_relationship_memories(
+        self,
+        *,
+        memory_type: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 200,
+    ) -> List[RelationshipMemory]:
+        rows: List[str] = []
+        if self.redis:
+            for key in self.redis.keys("relationship:*"):
+                if key == "relationship:followups":
+                    continue
+                rows.extend(self.redis.hvals(key))
+        else:
+            for user_memories in _memory.relationship_memories.values():
+                rows.extend(json.dumps(item, ensure_ascii=False) for item in user_memories.values())
+
+        memories: List[RelationshipMemory] = []
+        for row in rows:
+            try:
+                mem = RelationshipMemory.model_validate_json(row)
+            except Exception:
+                continue
+            if memory_type and mem.memory_type != memory_type:
+                continue
+            if status and mem.status != status:
+                continue
+            memories.append(mem)
+        memories.sort(key=lambda x: x.created_at, reverse=True)
+        return memories[:limit]
+
+    def save_thought_trace(self, trace: ThoughtTrace) -> ThoughtTrace:
+        payload = json.dumps(trace.model_dump(mode="json"), ensure_ascii=False)
+        if self.redis:
+            self.redis.hset("thought_traces", trace.trace_id, payload)
+            return trace
+        _memory.thought_traces[trace.trace_id] = trace.model_dump(mode="json")
+        return trace
+
+    def add_thought_trace(
+        self,
+        summary: str,
+        *,
+        trace_kind: str = "chat",
+        source: str = "",
+        trace_type: str = "",
+        input_summary: str = "",
+        context_summary: str = "",
+        retrieved_summary: str = "",
+        decision_summary: str = "",
+        output_summary: str = "",
+        safety_notes: str = "",
+        payload: Optional[dict] = None,
+        user_id: Optional[int] = None,
+        group_id: Optional[int] = None,
+        session_id: Optional[str] = None,
+        related_goal_id: Optional[str] = None,
+        related_task_id: Optional[str] = None,
+    ) -> ThoughtTrace:
+        trace = ThoughtTrace(
+            trace_id=uuid.uuid4().hex[:12],
+            trace_kind=self._normalize_trace_kind(trace_kind),  # type: ignore[arg-type]
+            source=source,
+            trace_type=trace_type,
+            summary=summary,
+            input_summary=input_summary,
+            context_summary=context_summary,
+            retrieved_summary=retrieved_summary,
+            decision_summary=decision_summary,
+            output_summary=output_summary,
+            safety_notes=safety_notes,
+            payload=payload or {},
+            user_id=user_id,
+            group_id=group_id,
+            session_id=session_id,
+            related_goal_id=related_goal_id,
+            related_task_id=related_task_id,
+        )
+        return self.save_thought_trace(trace)
+
+    def append_thought_trace(self, payload: dict) -> ThoughtTrace:
+        created_at = self._parse_datetime(payload.get("created_at"))
+        trace_kind = self._normalize_trace_kind(str(payload.get("trace_kind") or payload.get("trace_type") or "chat"))
+        trace = ThoughtTrace(
+            trace_id=str(payload.get("trace_id") or uuid.uuid4().hex[:12]),
+            trace_kind=trace_kind,  # type: ignore[arg-type]
+            source=str(payload.get("source") or ""),
+            trace_type=str(payload.get("trace_type") or payload.get("event_type") or ""),
+            summary=str(payload.get("summary") or ""),
+            input_summary=str(payload.get("input_summary") or ""),
+            context_summary=str(payload.get("context_summary") or ""),
+            retrieved_summary=str(payload.get("retrieved_summary") or ""),
+            decision_summary=str(payload.get("decision_summary") or ""),
+            output_summary=str(payload.get("output_summary") or ""),
+            safety_notes=str(payload.get("safety_notes") or ""),
+            payload=payload.get("payload") if isinstance(payload.get("payload"), dict) else {},
+            user_id=self._optional_int(payload.get("user_id")),
+            group_id=self._optional_int(payload.get("group_id")),
+            session_id=payload.get("session_id"),
+            related_goal_id=payload.get("related_goal_id") or payload.get("goal_id"),
+            related_task_id=payload.get("related_task_id") or payload.get("task_id"),
+            created_at=created_at or datetime.now(),
+        )
+        return self.save_thought_trace(trace)
+
+    def get_thought_trace(self, trace_id: str) -> Optional[ThoughtTrace]:
+        if self.redis:
+            raw = self.redis.hget("thought_traces", trace_id)
+            if not raw:
+                return None
+            try:
+                return ThoughtTrace.model_validate_json(raw)
+            except Exception:
+                return None
+        data = _memory.thought_traces.get(trace_id)
+        return ThoughtTrace.model_validate(data) if data else None
+
+    def list_thought_traces(
+        self,
+        *,
+        trace_kind: Optional[str] = None,
+        user_id: Optional[int] = None,
+        limit: int = 100,
+    ) -> List[ThoughtTrace]:
+        rows: List[str]
+        if self.redis:
+            rows = self.redis.hvals("thought_traces")
+        else:
+            rows = [json.dumps(item, ensure_ascii=False) for item in _memory.thought_traces.values()]
+        traces: List[ThoughtTrace] = []
+        for row in rows:
+            try:
+                trace = ThoughtTrace.model_validate_json(row)
+            except Exception:
+                continue
+            if trace_kind and trace.trace_kind != trace_kind:
+                continue
+            if user_id is not None and trace.user_id != user_id:
+                continue
+            traces.append(trace)
+        traces.sort(key=lambda x: x.created_at, reverse=True)
+        return traces[:limit]
+
+    def save_autonomy_goal(self, goal: AutonomyGoal) -> AutonomyGoal:
+        goal.updated_at = datetime.now()
+        payload = json.dumps(goal.model_dump(mode="json"), ensure_ascii=False)
+        if self.redis:
+            self.redis.hset("autonomy:goals", goal.goal_id, payload)
+            return goal
+        _memory.autonomy_goals[goal.goal_id] = goal.model_dump(mode="json")
+        return goal
+
+    def add_autonomy_goal(
+        self,
+        title: str,
+        *,
+        summary: str = "",
+        status: str = "active",
+        priority: int = 0,
+        owner: str = "bot",
+        due_at: Optional[datetime] = None,
+    ) -> AutonomyGoal:
+        goal = AutonomyGoal(
+            goal_id=uuid.uuid4().hex[:12],
+            title=title,
+            summary=summary,
+            status=status,  # type: ignore[arg-type]
+            priority=priority,
+            owner=owner,
+            due_at=due_at,
+        )
+        return self.save_autonomy_goal(goal)
+
+    def get_autonomy_goal(self, goal_id: str) -> Optional[AutonomyGoal]:
+        if self.redis:
+            raw = self.redis.hget("autonomy:goals", goal_id)
+            if not raw:
+                return None
+            try:
+                return AutonomyGoal.model_validate_json(raw)
+            except Exception:
+                return None
+        data = _memory.autonomy_goals.get(goal_id)
+        return AutonomyGoal.model_validate(data) if data else None
+
+    def list_autonomy_goals(self, *, status: Optional[str] = None, limit: int = 100) -> List[AutonomyGoal]:
+        rows: List[str]
+        if self.redis:
+            rows = self.redis.hvals("autonomy:goals")
+        else:
+            rows = [json.dumps(item, ensure_ascii=False) for item in _memory.autonomy_goals.values()]
+        goals: List[AutonomyGoal] = []
+        for row in rows:
+            try:
+                goal = AutonomyGoal.model_validate_json(row)
+            except Exception:
+                continue
+            if status and goal.status != status:
+                continue
+            goals.append(goal)
+        goals.sort(key=lambda x: (x.priority, x.updated_at), reverse=True)
+        return goals[:limit]
+
+    def save_autonomy_task(self, task: AutonomyTask) -> AutonomyTask:
+        task.updated_at = datetime.now()
+        payload = json.dumps(task.model_dump(mode="json"), ensure_ascii=False)
+        if self.redis:
+            self.redis.hset("autonomy:tasks", task.task_id, payload)
+            return task
+        _memory.autonomy_tasks[task.task_id] = task.model_dump(mode="json")
+        return task
+
+    def add_autonomy_task(
+        self,
+        title: str,
+        *,
+        goal_id: Optional[str] = None,
+        summary: str = "",
+        status: str = "todo",
+        priority: int = 0,
+        due_at: Optional[datetime] = None,
+    ) -> AutonomyTask:
+        task = AutonomyTask(
+            task_id=uuid.uuid4().hex[:12],
+            goal_id=goal_id,
+            title=title,
+            summary=summary,
+            status=status,  # type: ignore[arg-type]
+            priority=priority,
+            due_at=due_at,
+        )
+        return self.save_autonomy_task(task)
+
+    def get_autonomy_task(self, task_id: str) -> Optional[AutonomyTask]:
+        if self.redis:
+            raw = self.redis.hget("autonomy:tasks", task_id)
+            if not raw:
+                return None
+            try:
+                return AutonomyTask.model_validate_json(raw)
+            except Exception:
+                return None
+        data = _memory.autonomy_tasks.get(task_id)
+        return AutonomyTask.model_validate(data) if data else None
+
+    def list_autonomy_tasks(
+        self,
+        *,
+        goal_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[AutonomyTask]:
+        rows: List[str]
+        if self.redis:
+            rows = self.redis.hvals("autonomy:tasks")
+        else:
+            rows = [json.dumps(item, ensure_ascii=False) for item in _memory.autonomy_tasks.values()]
+        tasks: List[AutonomyTask] = []
+        for row in rows:
+            try:
+                task = AutonomyTask.model_validate_json(row)
+            except Exception:
+                continue
+            if goal_id and task.goal_id != goal_id:
+                continue
+            if status and task.status != status:
+                continue
+            tasks.append(task)
+        tasks.sort(key=lambda x: (x.priority, x.updated_at), reverse=True)
+        return tasks[:limit]
+
+    def save_autonomy_progress_event(self, event: AutonomyProgressEvent) -> AutonomyProgressEvent:
+        payload = json.dumps(event.model_dump(mode="json"), ensure_ascii=False)
+        if self.redis:
+            self.redis.hset("autonomy:progress_events", event.event_id, payload)
+            return event
+        _memory.autonomy_progress_events[event.event_id] = event.model_dump(mode="json")
+        return event
+
+    def get_autonomy_progress_event(self, event_id: str) -> Optional[AutonomyProgressEvent]:
+        if self.redis:
+            raw = self.redis.hget("autonomy:progress_events", event_id)
+            if not raw:
+                return None
+            try:
+                return AutonomyProgressEvent.model_validate_json(raw)
+            except Exception:
+                return None
+        data = _memory.autonomy_progress_events.get(event_id)
+        return AutonomyProgressEvent.model_validate(data) if data else None
+
+    def add_autonomy_progress_event(
+        self,
+        summary: str,
+        *,
+        event_kind: str = "note",
+        source: str = "",
+        event_type: str = "",
+        payload: Optional[dict] = None,
+        goal_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> AutonomyProgressEvent:
+        event = AutonomyProgressEvent(
+            event_id=uuid.uuid4().hex[:12],
+            event_kind=self._normalize_progress_event_kind(event_kind),  # type: ignore[arg-type]
+            source=source,
+            event_type=event_type,
+            summary=summary,
+            payload=payload or {},
+            goal_id=goal_id,
+            task_id=task_id,
+        )
+        return self.save_autonomy_progress_event(event)
+
+    def append_progress_event(self, payload: dict) -> AutonomyProgressEvent:
+        event_type = str(payload.get("event_type") or payload.get("event_kind") or "note")
+        event_kind = self._normalize_progress_event_kind(event_type)
+        created_at = self._parse_datetime(payload.get("created_at"))
+        event = AutonomyProgressEvent(
+            event_id=str(payload.get("event_id") or uuid.uuid4().hex[:12]),
+            event_kind=event_kind,  # type: ignore[arg-type]
+            source=str(payload.get("source") or ""),
+            event_type=event_type,
+            summary=str(payload.get("summary") or ""),
+            payload=payload.get("payload") if isinstance(payload.get("payload"), dict) else {},
+            goal_id=payload.get("goal_id"),
+            task_id=payload.get("task_id"),
+            created_at=created_at or datetime.now(),
+        )
+        return self.save_autonomy_progress_event(event)
+
+    def list_autonomy_progress_events(
+        self,
+        *,
+        goal_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[AutonomyProgressEvent]:
+        rows: List[str]
+        if self.redis:
+            rows = self.redis.hvals("autonomy:progress_events")
+        else:
+            rows = [json.dumps(item, ensure_ascii=False) for item in _memory.autonomy_progress_events.values()]
+        events: List[AutonomyProgressEvent] = []
+        for row in rows:
+            try:
+                event = AutonomyProgressEvent.model_validate_json(row)
+            except Exception:
+                continue
+            if goal_id and event.goal_id != goal_id:
+                continue
+            if task_id and event.task_id != task_id:
+                continue
+            events.append(event)
+        events.sort(key=lambda x: x.created_at, reverse=True)
+        return events[:limit]
+
+    @staticmethod
+    def _parse_datetime(value: object) -> Optional[datetime]:
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str) and value:
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _optional_int(value: object) -> Optional[int]:
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _normalize_progress_event_kind(event_type: str) -> str:
+        if event_type in {
+            "created",
+            "updated",
+            "blocked",
+            "completed",
+            "cancelled",
+            "note",
+            "decision",
+            "sent",
+            "ask_owner",
+            "rejected",
+            "approved",
+            "rewritten",
+            "silent",
+        }:
+            return event_type
+        if "approve" in event_type or "批准" in event_type:
+            return "approved"
+        if "cancel" in event_type or "取消" in event_type:
+            return "cancelled"
+        if "rewrite" in event_type or "改写" in event_type:
+            return "rewritten"
+        if "ask" in event_type or "owner" in event_type:
+            return "ask_owner"
+        if "sent" in event_type or "send" in event_type:
+            return "sent"
+        if "silent" in event_type:
+            return "silent"
+        if "decision" in event_type:
+            return "decision"
+        return "note"
+
+    @staticmethod
+    def _normalize_trace_kind(trace_type: str) -> str:
+        if trace_type in {"chat", "tool", "autonomy", "system"}:
+            return trace_type
+        if trace_type.startswith("autonomy") or trace_type.startswith("decision"):
+            return "autonomy"
+        if trace_type.startswith("tool"):
+            return "tool"
+        return "chat"
 
     def list_due_followups(self, now: Optional[datetime] = None, limit: int = 20) -> List[RelationshipMemory]:
         now = now or datetime.now()

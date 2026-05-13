@@ -257,6 +257,46 @@ def append_log(event: str, payload: dict) -> None:
     logger.info(f"autonomy log: {item}")
 
 
+def append_progress_event(event_type: str, summary: str, payload: dict) -> None:
+    method = getattr(storage, "append_progress_event", None)
+    if not callable(method):
+        logger.warning("StorageService.append_progress_event is not available; autonomy progress event skipped.")
+        return
+    try:
+        method(
+            {
+                "type": "AutonomyProgressEvent",
+                "source": "autonomy",
+                "event_type": event_type,
+                "summary": summary,
+                "payload": payload,
+                "created_at": datetime.now().isoformat(),
+            }
+        )
+    except Exception as exc:
+        logger.warning(f"写入自主行动进展事件失败: {exc}")
+
+
+def append_thought_trace(trace_type: str, summary: str, payload: dict) -> None:
+    method = getattr(storage, "append_thought_trace", None)
+    if not callable(method):
+        logger.warning("StorageService.append_thought_trace is not available; autonomy thought trace skipped.")
+        return
+    try:
+        method(
+            {
+                "type": "ThoughtTrace",
+                "source": "autonomy",
+                "trace_type": trace_type,
+                "summary": summary,
+                "payload": payload,
+                "created_at": datetime.now().isoformat(),
+            }
+        )
+    except Exception as exc:
+        logger.warning(f"写入自主行动思考摘要失败: {exc}")
+
+
 def extract_json_object(text: str) -> dict:
     text = text.strip()
     if "```json" in text:
@@ -685,7 +725,22 @@ owner 建议：
         )
         decision = parse_decision(extract_json_object(content))
         decision = apply_target_hint(decision, target_hint)
-        return await polish_decision_message(decision, suggestion)
+        decision = await polish_decision_message(decision, suggestion)
+        append_thought_trace(
+            "decision_made",
+            "自主行动完成一次决策；仅保存结构化结论和审计摘要，不保存隐藏推理链。",
+            {
+                "suggestion_preview": (suggestion or "")[:160],
+                "action": decision.action,
+                "target_type": decision.target_type,
+                "target_id": decision.target_id,
+                "confidence": decision.confidence,
+                "risk": decision.risk,
+                "reason": decision.reason,
+                "message_preview": decision.message[:160],
+            },
+        )
+        return decision
     except Exception as exc:
         logger.warning(f"自主行动决策失败: {exc}")
         return AutonomyDecision("silent", "none", None, 0.0, "high", "", "决策失败")
@@ -704,6 +759,11 @@ async def ask_owner(bot: Bot, decision: AutonomyDecision) -> None:
         created_at=now_ts(),
     )
     save_pending(pending)
+    append_progress_event(
+        "owner_confirmation_requested",
+        "自主行动需要 owner 确认，已创建待确认项。",
+        {"pending": asdict(pending)},
+    )
     scene = "群聊" if pending.target_type == "group" else "私聊"
     await bot.send_private_msg(
         user_id=settings.autonomy_owner_id,
@@ -725,9 +785,19 @@ async def ask_owner_clarification(bot: Bot, text: str, decision: AutonomyDecisio
 async def send_action(bot: Bot, target_type: TargetType, target_id: int, message: str, reason: str) -> bool:
     if not target_allowed(target_type, target_id):
         append_log("send_rejected", {"reason": "target not allowed", "target_type": target_type, "target_id": target_id})
+        append_progress_event(
+            "send_rejected",
+            "自主行动发送被拒绝：目标不在白名单。",
+            {"reason": "target not allowed", "target_type": target_type, "target_id": target_id},
+        )
         return False
     if in_cooldown(target_type, target_id):
         append_log("send_rejected", {"reason": "cooldown", "target_type": target_type, "target_id": target_id})
+        append_progress_event(
+            "send_rejected",
+            "自主行动发送被拒绝：目标处于冷却期。",
+            {"reason": "cooldown", "target_type": target_type, "target_id": target_id},
+        )
         return False
     access = governance.can_chat(settings.autonomy_owner_id, target_id if target_type == "group" else None)
     if not access.allowed:
@@ -759,15 +829,27 @@ async def send_action(bot: Bot, target_type: TargetType, target_id: int, message
         "sent",
         {"target_type": target_type, "target_id": target_id, "message": message, "reason": reason},
     )
+    append_progress_event(
+        "message_sent",
+        "自主行动消息已发送。",
+        {
+            "target_type": target_type,
+            "target_id": target_id,
+            "reason": reason,
+            "message_preview": message[:160],
+        },
+    )
     return True
 
 
 async def handle_decision(bot: Bot, decision: AutonomyDecision) -> str:
     if decision.risk == "high" or decision.confidence < 0.45:
         append_log("silent", {"decision": asdict(decision)})
+        append_progress_event("decision_silent", "自主行动选择静默。", {"decision": asdict(decision)})
         return "silent"
     if decision.action == "silent":
         append_log("silent", {"decision": asdict(decision)})
+        append_progress_event("decision_silent", "自主行动选择静默。", {"decision": asdict(decision)})
         return "silent"
     if not decision.target_id:
         await ask_owner_clarification(
@@ -808,6 +890,7 @@ async def handle_decision(bot: Bot, decision: AutonomyDecision) -> str:
         await ask_owner(bot, decision)
         return "asked"
     append_log("silent", {"decision": asdict(decision)})
+    append_progress_event("decision_silent", "自主行动选择静默。", {"decision": asdict(decision)})
     return "silent"
 
 

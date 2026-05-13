@@ -95,6 +95,9 @@ class Settings(BaseSettings):
     # Scheduler
     default_group_id: Optional[int] = Field(default=None, validation_alias=AliasChoices("GROUP_ID", "DEFAULT_GROUP_ID"))
 
+    # Dashboard
+    dashboard_token: Optional[str] = Field(default=None, validation_alias=AliasChoices("DASHBOARD_TOKEN"))
+
     # Chat
     max_history_turns: int = Field(default=50, validation_alias=AliasChoices("MAX_HISTORY_TURNS"))
     reply_random_chance: float = Field(default=0.001, validation_alias=AliasChoices("REPLY_RANDOM_CHANCE"))

@@ -10,6 +10,7 @@ driver.register_adapter(OneBotV11Adapter)
 
 nonebot.load_plugin("src.plugins.chat")  
 nonebot.load_plugin("src.plugins.autonomy")
+nonebot.load_plugin("src.plugins.dashboard")
 nonebot.load_plugin("src.plugins.scheduler")
 nonebot.load_plugin("src.plugins.weather")
 nonebot.load_plugin("src.plugins.what_to_eat")

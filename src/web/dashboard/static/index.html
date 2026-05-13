@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>茉子忍者手账</title>
+    <link rel="stylesheet" href="/mako/dashboard/assets/dashboard.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow">✦ 忍者手账</div>
+          <h1>茉子的修行看板</h1>
+          <p id="progress-label">把目标、笔记和思考线索收进同一本卷轴。</p>
+          <div class="token-row">
+            <input id="token-input" placeholder="Bearer token" aria-label="Dashboard token" />
+            <button id="reload-button" type="button">↻ <span>刷新</span></button>
+          </div>
+          <p id="error-text" class="error-text" hidden></p>
+        </div>
+        <div class="hero-progress">
+          <div class="progress-ring" id="progress-ring" style="--progress: 0deg" aria-label="总进度 0%">
+            <span id="progress-value">0</span><small>%</small>
+          </div>
+          <div>
+            <strong id="progress-streak">今日静候任务</strong>
+            <span id="progress-updated">卷轴边缘还留着空白</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="dashboard-grid">
+        <section class="panel profile-panel">
+          <div class="section-title"><span>◎</span><h2>茉子档案</h2></div>
+          <div class="profile-card">
+            <div class="avatar">茉</div>
+            <div>
+              <h3 id="mako-name">茉子</h3>
+              <p id="mako-title">见习忍者手账员</p>
+            </div>
+          </div>
+          <dl class="compact-list">
+            <div><dt>状态</dt><dd id="mako-mood">安静观察中</dd></div>
+            <div><dt>标记</dt><dd id="mako-traits">轻步 / 认真 / 会把碎片整理成地图</dd></div>
+          </dl>
+        </section>
+
+        <section class="panel tasks-panel">
+          <div class="section-title"><span>◇</span><h2>目标 / 任务树</h2></div>
+          <div id="task-tree"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-title"><span>↟</span><h2>最近进展</h2></div>
+          <div id="recent-progress"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-title"><span>□</span><h2>笔记</h2></div>
+          <div id="notes"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-title"><span>☰</span><h2>用户档案</h2></div>
+          <dl class="compact-list">
+            <div><dt>名字</dt><dd id="user-name">旅人</dd></div>
+            <div><dt>关注</dt><dd id="user-focus">还没有写入档案</dd></div>
+            <div><dt>偏好</dt><dd id="user-preferences">暂无</dd></div>
+          </dl>
+        </section>
+
+        <section class="panel thinking-panel">
+          <div class="section-title"><span>✧</span><h2>思考摘要</h2></div>
+          <div id="thinking-summary"></div>
+        </section>
+      </div>
+
+      <footer><span>卷轴 API: GET /mako/dashboard/api/summary</span></footer>
+    </main>
+    <script src="/mako/dashboard/assets/dashboard.js"></script>
+  </body>
+</html>
