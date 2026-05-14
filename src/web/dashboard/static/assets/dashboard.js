@@ -57,6 +57,25 @@
     return value.title || value.name || value.label || value.summary || value.content || JSON.stringify(value);
   }
 
+  function cleanProfileText(value) {
+    let raw = text(value).trim();
+    raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return cleanProfileText(parsed.profile_text || parsed.summary || parsed.content || '');
+      }
+    } catch (_error) {
+      // Plain profile text is expected for most records.
+    }
+    return raw.replace(/\\n/g, '\n').trim();
+  }
+
+  function firstUsefulLine(value) {
+    const cleaned = cleanProfileText(value);
+    return cleaned.split('\n').map((line) => line.trim()).find(Boolean) || '';
+  }
+
   function getInitialToken() {
     const params = new URLSearchParams(window.location.search);
     const queryToken = params.get('token') || params.get('auth_token');
@@ -97,12 +116,13 @@
 
   function normalizePerson(person, index) {
     if (typeof person === 'string') return { id: `person-${index}`, name: person, role: '', notes: [] };
+    const profileText = cleanProfileText(person.profile_text || person.profile || person.body || '');
     return {
       id: person.id || person.key || `person-${index}`,
       name: person.name || person.nickname || person.title || `人物 ${index + 1}`,
       role: person.role || person.relationship || person.label || `QQ ${person.user_id || ''}`.trim(),
-      summary: person.summary || person.description || person.focus || '',
-      profile_text: person.profile_text || person.profile || person.body || '',
+      summary: person.summary || person.description || person.focus || firstUsefulLine(profileText),
+      profile_text: profileText,
       preferences: asArray(person.preferences),
       notes: asArray(person.notes || person.memories || person.tags),
       relationship_memories: asArray(person.relationship_memories || person.relationships),
@@ -115,7 +135,7 @@
     if (typeof note === 'string') return { id: `${type}-${index}`, title: `${type === 'memory' ? '记忆' : '笔记'} ${index + 1}`, body: note, tags: [] };
     return {
       id: note.id || note.key || `${type}-${index}`,
-      title: note.title || note.topic || note.name || `${type === 'memory' ? '记忆' : '笔记'} ${index + 1}`,
+      title: note.title || note.topic || note.name || note.type || note.trace_type || `${type === 'memory' ? '记忆' : '笔记'} ${index + 1}`,
       body: note.body || note.text || note.content || note.summary || '',
       date: note.date || note.created_at || note.updated_at || note.time || '',
       tags: asArray(note.tags || note.keywords || note.people || note.category),
@@ -207,8 +227,12 @@
   function renderDetail(title, summary, bodyNode, meta = '') {
     const details = h('details', { className: 'detail-card' }, [
       h('summary', {}, [
-        h('span', {}, [h('strong', { text: title }), summary ? h('small', { text: summary }) : '']),
-        meta ? h('em', { text: meta }) : ''
+        h('span', { className: 'detail-toggle', 'aria-hidden': 'true' }),
+        h('span', { className: 'detail-title' }, [
+          h('strong', { text: title }),
+          summary ? h('small', { text: summary }) : ''
+        ]),
+        meta ? h('em', { className: 'detail-meta', text: meta }) : ''
       ]),
       bodyNode
     ]);
@@ -222,9 +246,13 @@
       const meta = [task.owner, task.due, task.progress !== undefined ? `${task.progress}%` : ''].filter(Boolean).join(' · ');
       const body = h('div', { className: 'detail-body' }, [
         task.summary ? h('p', { text: task.summary }) : h('p', { text: '暂无详情。' }),
+        task.evidence ? h('p', { className: 'evidence-line', text: `证据：${task.evidence}` }) : '',
+        task.next_step ? h('p', { className: 'next-line', text: `下一步：${task.next_step}` }) : '',
         task.children.length ? renderTasks(task.children) : ''
       ]);
-      return renderDetail(task.title, task.group || statusLabel(task.status), body, meta || statusLabel(task.status));
+      const node = renderDetail(task.title, task.group || task.summary || statusLabel(task.status), body, meta || statusLabel(task.status));
+      node.classList.add('task-card', `status-${task.status}`);
+      return node;
     }));
   }
 
@@ -312,8 +340,8 @@
         person.name,
         [person.role, person.last_updated ? `更新 ${person.last_updated}` : '', person.memory_count ? `${person.memory_count} 条关系记忆` : ''].filter(Boolean).join(' · ') || '未标注关系',
         h('div', { className: 'detail-body' }, [
-          h('p', { text: person.summary || '暂无人物摘要。' }),
-          person.profile_text ? h('pre', { className: 'profile-text', text: person.profile_text }) : '',
+          person.summary ? h('p', { className: 'profile-summary', text: person.summary }) : '',
+          person.profile_text ? h('div', { className: 'profile-text', text: person.profile_text }) : '',
           person.preferences.length ? h('div', { className: 'tag-row' }, person.preferences.map((tag) => h('span', { text: text(tag) }))) : '',
           person.notes.length ? h('div', { className: 'tag-row' }, person.notes.map((tag) => h('span', { text: text(tag) }))) : '',
           person.relationship_memories.length ? h('div', { className: 'mini-list' }, person.relationship_memories.map((memory) => h('span', {
@@ -338,10 +366,13 @@
 
   function renderRoadmap(summary) {
     const groups = summary.roadmap_groups.length ? summary.roadmap_groups : [{ title: '路线图', tasks: summary.roadmap_tasks }];
-    return h('section', { className: 'roadmap-grid' }, groups.map((group) => h('div', { className: 'panel' }, [
+    return h('section', { className: 'roadmap-grid' }, groups.map((group) => h('article', { className: 'panel roadmap-panel' }, [
       h('div', { className: 'section-title' }, [
         h('h2', { text: group.title }),
-        h('p', { text: `${group.done || 0}/${group.total || (group.tasks || []).length} · ${group.progress || 0}%` })
+        h('p', { text: `${group.done || 0}/${group.total || (group.tasks || []).length} 完成 · ${group.progress || 0}%` })
+      ]),
+      h('div', { className: 'group-meter', 'aria-label': `${group.title} ${group.progress || 0}%` }, [
+        h('i', { style: `width: ${Math.max(0, Math.min(100, Number(group.progress || 0)))}%` })
       ]),
       group.summary ? h('p', { className: 'group-summary', text: group.summary }) : '',
       renderTasks(group.tasks || [])
