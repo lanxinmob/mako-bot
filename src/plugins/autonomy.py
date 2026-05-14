@@ -731,6 +731,11 @@ owner 建议：
             "自主行动完成一次决策；仅保存结构化结论和审计摘要，不保存隐藏推理链。",
             {
                 "suggestion_preview": (suggestion or "")[:160],
+                "context_preview": context[:800],
+                "target_hint": asdict(target_hint),
+                "allowed_groups": group_ids(),
+                "allowed_private_users": private_user_ids(),
+                "recent_record_count": len(recent_records),
                 "action": decision.action,
                 "target_type": decision.target_type,
                 "target_id": decision.target_id,

@@ -464,6 +464,9 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
                 "group_id": getattr(event, "group_id", None),
                 "model": "deepseek-chat",
                 "input_preview": user_message[:120],
+                "profile_preview": str(profile_text)[:240],
+                "knowledge_preview": str(related_knowledge)[:320],
+                "history_turns": len(user_history),
                 "reply_preview": reply_text[:160],
             },
         )

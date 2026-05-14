@@ -94,9 +94,35 @@
     return 'todo';
   }
 
+  function firstValue(...values) {
+    return values.find((value) => text(value).trim()) || '';
+  }
+
+  function normalizeEvidence(value) {
+    if (!value) return [];
+    return asArray(value).flatMap((item) => {
+      if (!item) return [];
+      if (Array.isArray(item)) return normalizeEvidence(item);
+      return [text(item)];
+    }).filter(Boolean);
+  }
+
   function normalizeTask(task, index = 0, group = '') {
     if (typeof task === 'string') {
-      return { id: `task-${index}`, title: task, status: 'todo', done: false, children: [], group };
+      return {
+        id: `task-${index}`,
+        title: task,
+        status: 'todo',
+        status_label: statusLabel('todo'),
+        done: false,
+        completion_criteria: '',
+        completion_basis: [],
+        verification: '',
+        why_status: '',
+        next_step: '',
+        children: [],
+        group
+      };
     }
     const done = Boolean(task.done || task.completed || task.status === 'done');
     const status = normalizeStatus(task.status || task.state, done);
@@ -109,6 +135,12 @@
       progress: task.progress ?? task.percent,
       owner: task.owner || task.assignee || '',
       due: task.due || task.due_at || task.date || '',
+      status_label: task.status_label || statusLabel(status),
+      completion_criteria: firstValue(task.completion_criteria, task.acceptance_criteria, task.done_when),
+      completion_basis: normalizeEvidence(task.completion_basis || task.basis || task.evidence),
+      verification: firstValue(task.verification, task.verify, task.test_plan),
+      why_status: firstValue(task.why_status, task.status_reason, task.reason),
+      next_step: firstValue(task.next_step, task.next, task.action, task.todo_next),
       group,
       children: asArray(task.children || task.tasks || task.items).map((child, childIndex) => normalizeTask(child, childIndex, group))
     };
@@ -132,14 +164,37 @@
   }
 
   function normalizeNote(note, index, type = 'note') {
-    if (typeof note === 'string') return { id: `${type}-${index}`, title: `${type === 'memory' ? '记忆' : '笔记'} ${index + 1}`, body: note, tags: [] };
+    if (typeof note === 'string') {
+      return {
+        id: `${type}-${index}`,
+        title: `${type === 'memory' ? '记忆' : '笔记'} ${index + 1}`,
+        body: note,
+        tags: [],
+        trigger_source: '',
+        context_observed: '',
+        retrieved_memory: [],
+        decision_result: '',
+        final_output: '',
+        safety_notes: [],
+        audit_note: '',
+        target_label: ''
+      };
+    }
     return {
       id: note.id || note.key || `${type}-${index}`,
-      title: note.title || note.topic || note.name || note.type || note.trace_type || `${type === 'memory' ? '记忆' : '笔记'} ${index + 1}`,
-      body: note.body || note.text || note.content || note.summary || '',
+      title: note.title || note.topic || note.name || note.target_label || note.type || note.trace_type || `${type === 'memory' ? '记忆' : '笔记'} ${index + 1}`,
+      body: note.body || note.text || note.content || note.summary || note.final_output || '',
       date: note.date || note.created_at || note.updated_at || note.time || '',
       tags: asArray(note.tags || note.keywords || note.people || note.category),
-      source: note.source || type
+      source: note.source || type,
+      trigger_source: note.trigger_source || note.source_event || '',
+      context_observed: note.context_observed || note.context || '',
+      retrieved_memory: normalizeEvidence(note.retrieved_memory || note.memory_used || note.memories_used),
+      decision_result: note.decision_result || note.decision || '',
+      final_output: note.final_output || note.output || '',
+      safety_notes: normalizeEvidence(note.safety_notes || note.safety || note.guardrails),
+      audit_note: note.audit_note || note.audit || '',
+      target_label: note.target_label || note.target || note.subject || ''
     };
   }
 
@@ -244,16 +299,32 @@
     if (!filtered.length) return emptyState('没有匹配当前筛选的任务。');
     return h('div', { className: 'task-list' }, filtered.map((task) => {
       const meta = [task.owner, task.due, task.progress !== undefined ? `${task.progress}%` : ''].filter(Boolean).join(' · ');
+      const basis = task.completion_basis.length ? task.completion_basis : normalizeEvidence(task.evidence);
       const body = h('div', { className: 'detail-body' }, [
-        task.summary ? h('p', { text: task.summary }) : h('p', { text: '暂无详情。' }),
-        task.evidence ? h('p', { className: 'evidence-line', text: `证据：${task.evidence}` }) : '',
-        task.next_step ? h('p', { className: 'next-line', text: `下一步：${task.next_step}` }) : '',
+        task.summary ? h('p', { className: 'task-summary', text: task.summary }) : '',
+        h('div', { className: 'task-brief-grid' }, [
+          task.completion_criteria ? infoBlock('完成标准', task.completion_criteria, 'criteria') : infoBlock('完成标准', '后端暂未提供 completion_criteria。', 'criteria muted'),
+          task.why_status ? infoBlock('状态判定', task.why_status, 'status') : infoBlock('状态判定', `当前按 ${task.status_label} 展示。`, 'status muted'),
+          basis.length ? infoBlock('依据 / 证据', basis, 'basis') : infoBlock('依据 / 证据', '暂无 completion_basis。', 'basis muted'),
+          task.verification ? infoBlock('验证方式', task.verification, 'verify') : infoBlock('验证方式', '等待 verification。', 'verify muted'),
+          task.next_step ? infoBlock('下一步', task.next_step, 'next') : infoBlock('下一步', '暂无下一步。', 'next muted')
+        ]),
         task.children.length ? renderTasks(task.children) : ''
       ]);
-      const node = renderDetail(task.title, task.group || task.summary || statusLabel(task.status), body, meta || statusLabel(task.status));
+      const node = renderDetail(task.title, task.group || task.summary || task.status_label, body, meta || task.status_label);
       node.classList.add('task-card', `status-${task.status}`);
       return node;
     }));
+  }
+
+  function infoBlock(label, value, tone = '') {
+    const values = normalizeEvidence(value);
+    return h('section', { className: `info-block ${tone}`.trim() }, [
+      h('span', { text: label }),
+      values.length > 1
+        ? h('ul', {}, values.map((item) => h('li', { text: item })))
+        : h('p', { text: values[0] || text(value) || '暂无' })
+    ]);
   }
 
   function statusLabel(status) {
@@ -358,8 +429,18 @@
       h('div', { className: 'section-title' }, [h('h2', { text: '思考轨迹' })]),
       traces.length ? h('div', { className: 'card-stack' }, traces.map((trace) => renderDetail(
         trace.title,
-        trace.date || '思考记录',
-        h('div', { className: 'detail-body' }, [h('p', { text: trace.body || '暂无详情。' })])
+        [trace.target_label, trace.date || '思考记录'].filter(Boolean).join(' · '),
+        h('div', { className: 'detail-body thought-audit' }, [
+          h('div', { className: 'audit-grid' }, [
+            infoBlock('触发来源', trace.trigger_source || trace.source, 'trigger'),
+            infoBlock('观察到的上下文', trace.context_observed || trace.body, 'context'),
+            infoBlock('检索记忆', trace.retrieved_memory.length ? trace.retrieved_memory : '暂无检索记忆', 'memory'),
+            infoBlock('决策结果', trace.decision_result || '暂无决策结果', 'decision'),
+            infoBlock('最终输出', trace.final_output || trace.body || '暂无最终输出', 'output'),
+            infoBlock('安全备注', trace.safety_notes.length ? trace.safety_notes : '暂无安全备注', 'safety'),
+            infoBlock('审计备注', trace.audit_note || '暂无审计备注', 'audit')
+          ])
+        ])
       ))) : emptyState('没有匹配的思考轨迹。')
     ]);
   }

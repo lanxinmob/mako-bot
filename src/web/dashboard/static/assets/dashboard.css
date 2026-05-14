@@ -452,6 +452,97 @@ h1 {
   margin: 0;
 }
 
+.task-summary {
+  color: #3f4b44;
+}
+
+.task-brief-grid,
+.audit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.info-block {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(32, 35, 31, 0.1);
+  border-left: 3px solid var(--blue);
+  border-radius: 6px;
+  background:
+    linear-gradient(rgba(34, 93, 125, 0.045) 1px, transparent 1px),
+    rgba(255, 253, 248, 0.76);
+  background-size: 100% 28px;
+}
+
+.info-block span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.info-block p,
+.info-block ul {
+  margin: 0;
+  color: #37433d;
+  line-height: 1.58;
+  overflow-wrap: anywhere;
+}
+
+.info-block ul {
+  display: grid;
+  gap: 5px;
+  padding-left: 18px;
+}
+
+.info-block li {
+  padding-left: 2px;
+}
+
+.info-block.criteria,
+.info-block.decision,
+.info-block.output {
+  border-left-color: var(--green);
+}
+
+.info-block.basis,
+.info-block.memory,
+.info-block.audit {
+  border-left-color: var(--gold);
+}
+
+.info-block.verify,
+.info-block.safety {
+  border-left-color: var(--red);
+}
+
+.info-block.next,
+.info-block.trigger {
+  border-left-color: var(--blue);
+}
+
+.info-block.muted {
+  border-left-color: var(--line);
+  background: rgba(247, 248, 241, 0.72);
+}
+
+.info-block.muted span,
+.info-block.muted p {
+  color: var(--muted);
+}
+
+.thought-audit {
+  color: #3f4b44;
+}
+
+.thought-audit .info-block.context,
+.thought-audit .info-block.output,
+.thought-audit .info-block.audit {
+  grid-column: span 2;
+}
+
 .profile-summary {
   padding: 10px 12px;
   border-left: 3px solid var(--gold);
@@ -625,6 +716,17 @@ h1 {
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .task-brief-grid,
+  .audit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .thought-audit .info-block.context,
+  .thought-audit .info-block.output,
+  .thought-audit .info-block.audit {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 560px) {
@@ -653,5 +755,30 @@ h1 {
 
   .progress-dock {
     gap: 8px;
+  }
+
+  .roadmap-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-card summary {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 9px;
+    padding: 12px;
+  }
+
+  .detail-meta {
+    grid-column: 2;
+    max-width: 100%;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .detail-body {
+    padding: 0 12px 12px 49px;
+  }
+
+  .info-block {
+    padding: 10px;
   }
 }
