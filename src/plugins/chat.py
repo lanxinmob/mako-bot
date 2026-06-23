@@ -17,7 +17,7 @@ from src.plugins import vector_db
 from src.services.image import describe_image_url
 from src.services.intent import decide_intents
 from src.services.redis import get_redis
-from src.services.search import fetch_page_text, google_search
+from src.services.search import fetch_page_text, web_search
 from src.services.storage import StorageService
 from src.utils.message import normalize_message
 load_dotenv()
@@ -236,7 +236,76 @@ async def build_image_context(image_urls: List[str]) -> str:
     if remaining > 0:
         lines.append(f"还有{remaining}张图片未识别。")
     return "\n".join(lines)
-    
+
+
+def _search_query_with_image_hint(query: str, image_context: str) -> str:
+    if not image_context:
+        return query
+    if not any(token in query for token in ["图", "图片", "这张", "这个", "它", "上面", "里面"]):
+        return query
+    compact = " ".join(image_context.split())
+    return " ".join(f"{query} 图片内容：{compact}".split())[:300]
+
+
+async def build_search_context(user_text: str, *, image_context: str = "") -> str:
+    decisions = decide_intents(
+        user_text,
+        has_image=bool(image_context),
+        has_audio=False,
+        face_ids=[],
+    )
+    search_decisions = [
+        decision
+        for decision in decisions
+        if decision.name in {"search.web", "search.summarize_url"}
+    ]
+    if not search_decisions:
+        return ""
+
+    context_blocks: List[str] = []
+    for decision in search_decisions[:2]:
+        if decision.name == "search.web":
+            query = decision.args.get("query") or user_text
+            query = _search_query_with_image_hint(query, image_context)
+            try:
+                items = await web_search(query, num=MAX_SEARCH_RESULTS)
+            except Exception as exc:
+                logger.warning(f"联网搜索失败: {exc}")
+                context_blocks.append(f"联网搜索失败：{exc}")
+                continue
+
+            if not items:
+                context_blocks.append(f"联网搜索无结果。查询：{query}")
+                continue
+
+            lines = [f"搜索查询：{query}", f"搜索结果（已去重，最多{MAX_SEARCH_RESULTS}条）："]
+            for idx, item in enumerate(items, start=1):
+                source_line = f"   来源：{item.source}\n" if item.source else ""
+                lines.append(
+                    f"{idx}. {item.title}\n"
+                    f"   链接：{item.link}\n"
+                    f"{source_line}"
+                    f"   摘要：{item.snippet}"
+                )
+            context_blocks.append("\n".join(lines))
+            continue
+
+        url = decision.args.get("url", "")
+        if not url:
+            continue
+        try:
+            page_text = await fetch_page_text(url, max_chars=MAX_URL_CONTEXT_CHARS)
+        except Exception as exc:
+            logger.warning(f"链接内容读取失败: {exc}")
+            context_blocks.append(f"链接内容读取失败：{url}，原因：{exc}")
+            continue
+        if page_text:
+            context_blocks.append(f"链接内容摘录：{url}\n{page_text}")
+        else:
+            context_blocks.append(f"链接内容为空或无法读取：{url}")
+
+    return "\n\n".join(context_blocks)
+     
 
 @chat_handler.handle()
 async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
@@ -474,13 +543,21 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
             "[图片识别结果]\n图片识别未返回可用结果。"
         )
 
+    search_context = await build_search_context(user_message, image_context=image_context)
+    if search_context:
+        llm_user_message = (
+            f"{llm_user_message}\n\n"
+            f"[联网搜索结果]\n{search_context}"
+        )
+
     related_knowledge = vector_db.search_db(llm_user_message)
 
     try:
         messages_for_api = [
             {"role": "system", "content": f"""
             {MAKO_SYSTEM_PROMPT}\n请根据以下信息和当前聊天记录生成回答。\n以下是这个用户的画像：\n{profile_text}
-            \n以下是你沉淀的重要知识：{related_knowledge}\n"""}]
+            \n以下是你沉淀的重要知识：{related_knowledge}
+            \n如果用户消息里包含[联网搜索结果]，请把它当作最新外部事实来源；涉及实时信息时优先依据搜索结果，并保留关键来源链接，不要编造搜索结果之外的实时事实。\n"""}]
         for msg in user_history:
             #if 'parts' in msg:
                 #messages_for_api.append({"role": msg['role'], "content": msg['parts'][0]})
@@ -513,6 +590,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
                 "model": "deepseek-chat",
                 "input_preview": formatted_user_message[:120],
                 "image_context_preview": image_context[:240],
+                "search_context_preview": search_context[:320],
                 "profile_preview": str(profile_text)[:240],
                 "knowledge_preview": str(related_knowledge)[:320],
                 "history_turns": len(user_history),
