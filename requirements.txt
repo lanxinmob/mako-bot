@@ -57,6 +57,7 @@ pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pydantic==2.11.7
 pydantic_core==2.33.2
+pydantic-settings==2.10.1
 pyfiglet==1.0.3
 Pygments==2.19.2
 pygtrie==2.5.0
@@ -89,6 +90,5 @@ wcwidth==0.2.13
 websockets==15.0.1
 win32_setctime==1.2.0
 yarl==1.20.1
-redis==6.2.0
 numpy
 sentence-transformers

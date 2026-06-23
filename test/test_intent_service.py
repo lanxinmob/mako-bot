@@ -31,6 +31,14 @@ class IntentServiceTest(unittest.TestCase):
         intents = decide_intents(text="帮我查一下 qwen-vl-plus 最新价格", has_image=False, has_audio=False)
         self.assertIn("search.web", [item.name for item in intents])
 
+    def test_search_variant_phrase_triggers_web_search(self) -> None:
+        intents = decide_intents(text="你能查一查具体比分吗", has_image=False, has_audio=False)
+        self.assertIn("search.web", [item.name for item in intents])
+
+    def test_score_query_triggers_web_search(self) -> None:
+        intents = decide_intents(text="具体比分是多少", has_image=False, has_audio=False)
+        self.assertIn("search.web", [item.name for item in intents])
+
     def test_casual_now_phrase_does_not_trigger_web_search(self) -> None:
         intents = decide_intents(text="我现在有点难过", has_image=False, has_audio=False)
         self.assertNotIn("search.web", [item.name for item in intents])

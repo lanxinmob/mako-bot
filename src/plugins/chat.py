@@ -276,8 +276,10 @@ async def build_search_context(user_text: str, *, image_context: str = "") -> st
 
             if not items:
                 context_blocks.append(f"联网搜索无结果。查询：{query}")
+                logger.info(f"联网搜索无结果 query={query}")
                 continue
 
+            logger.info(f"联网搜索完成 query={query} results={len(items)}")
             lines = [f"搜索查询：{query}", f"搜索结果（已去重，最多{MAX_SEARCH_RESULTS}条）："]
             for idx, item in enumerate(items, start=1):
                 source_line = f"   来源：{item.source}\n" if item.source else ""
