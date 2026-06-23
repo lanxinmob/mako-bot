@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     amap_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("AMAP_KEY"))
 
     # Image
-    image_provider: Literal["openai", "gemini", "stability", "none"] = Field(
+    image_provider: Literal["openai", "gemini", "qwen", "stability", "none"] = Field(
         default="none", validation_alias=AliasChoices("IMAGE_PROVIDER")
     )
     image_size: str = Field(default="1024x1024", validation_alias=AliasChoices("IMAGE_SIZE"))
@@ -75,6 +75,17 @@ class Settings(BaseSettings):
     image_model: str = Field(default="gpt-image-1", validation_alias=AliasChoices("IMAGE_MODEL"))
     gemini_vision_model: str = Field(
         default="gemini-1.5-flash", validation_alias=AliasChoices("GEMINI_VISION_MODEL")
+    )
+    qwen_api_key: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("QWEN_API_KEY", "DASHSCOPE_API_KEY")
+    )
+    qwen_base_url: str = Field(
+        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        validation_alias=AliasChoices("QWEN_BASE_URL", "DASHSCOPE_BASE_URL"),
+    )
+    qwen_vision_model: str = Field(
+        default="qwen-vl-plus",
+        validation_alias=AliasChoices("QWEN_VISION_MODEL", "DASHSCOPE_VISION_MODEL"),
     )
     stability_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("STABILITY_API_KEY"))
 

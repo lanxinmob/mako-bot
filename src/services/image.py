@@ -13,7 +13,7 @@ from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
 from src.core.config import get_settings
 from src.core.errors import NotConfiguredError
 from src.services.gemini import describe_image_with_gemini, has_gemini
-from src.services.llm import get_openai_client, has_openai
+from src.services.llm import get_openai_client, get_qwen_client, has_openai, has_qwen
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -51,8 +51,40 @@ async def download_image_bytes(url: str) -> bytes:
     return content
 
 
+async def _describe_image_with_compatible_chat(
+    *,
+    client,
+    model: str,
+    image_url: str,
+    prompt: str = "请用简洁中文描述这张图片的内容。",
+) -> str:
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ],
+        max_tokens=512,
+    )
+    return (response.choices[0].message.content or "").strip()
+
+
 async def describe_image_url(image_url: str) -> str:
     settings = get_settings()
+
+    if settings.image_provider == "qwen":
+        if not has_qwen():
+            raise NotConfiguredError("IMAGE_PROVIDER=qwen but DASHSCOPE_API_KEY or QWEN_API_KEY is missing.")
+        return await _describe_image_with_compatible_chat(
+            client=get_qwen_client(),
+            model=settings.qwen_vision_model,
+            image_url=image_url,
+        )
 
     # Prefer Gemini for non-text when explicitly requested.
     if settings.image_provider == "gemini":
@@ -63,21 +95,18 @@ async def describe_image_url(image_url: str) -> str:
 
     # OpenAI route.
     if has_openai():
-        client = get_openai_client()
-        response = await client.chat.completions.create(
+        return await _describe_image_with_compatible_chat(
+            client=get_openai_client(),
             model=settings.vision_model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "请用简洁中文描述这张图片的内容。"},
-                        {"type": "image_url", "image_url": {"url": image_url}},
-                    ],
-                }
-            ],
-            max_tokens=256,
+            image_url=image_url,
         )
-        return response.choices[0].message.content.strip()
+
+    if has_qwen():
+        return await _describe_image_with_compatible_chat(
+            client=get_qwen_client(),
+            model=settings.qwen_vision_model,
+            image_url=image_url,
+        )
 
     # Gemini fallback if OpenAI is unavailable.
     if has_gemini():

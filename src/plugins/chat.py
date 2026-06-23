@@ -14,8 +14,12 @@ from datetime import datetime
 from dotenv import load_dotenv
 import hashlib
 from src.plugins import vector_db
+from src.services.image import describe_image_url
+from src.services.intent import decide_intents
 from src.services.redis import get_redis
+from src.services.search import fetch_page_text, google_search
 from src.services.storage import StorageService
+from src.utils.message import normalize_message
 load_dotenv()
 
 def generate_job_id(group_id: int, user_id: int, remind_time: datetime):
@@ -26,6 +30,9 @@ user_reminders: Dict[str, List[Dict[str, Any]]] = {}
 
 chat_histories: Dict[str, List[dict]] = {}
 MAX_HISTORY_TURNS = 50
+MAX_IMAGES_TO_DESCRIBE = 3
+MAX_SEARCH_RESULTS = 5
+MAX_URL_CONTEXT_CHARS = 3000
 
 redis_client = get_redis()
 audit_storage = StorageService()
@@ -210,12 +217,33 @@ async def send_group_reminder(group_id: int, session_id: str, job_id: str, msg: 
         logger.success(f"已发送并清理提醒: {job_id}")
     except Exception as e:
         logger.error(f"发送提醒失败: {e}")
+
+
+async def build_image_context(image_urls: List[str]) -> str:
+    if not image_urls:
+        return ""
+
+    lines: List[str] = []
+    for idx, image_url in enumerate(image_urls[:MAX_IMAGES_TO_DESCRIBE], start=1):
+        try:
+            desc = await describe_image_url(image_url)
+            lines.append(f"第{idx}张图片：{desc or '图片识别没有返回可用描述。'}")
+        except Exception as exc:
+            logger.warning(f"图片识别失败({idx}): {exc}")
+            lines.append(f"第{idx}张图片识别失败：{exc}")
+
+    remaining = len(image_urls) - MAX_IMAGES_TO_DESCRIBE
+    if remaining > 0:
+        lines.append(f"还有{remaining}张图片未识别。")
+    return "\n".join(lines)
     
 
 @chat_handler.handle()
 async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
     #sender_nickname = event.sender.card or event.sender.nickname 
     raw_message = event.get_message()
+    normalized_message = normalize_message(raw_message)
+    image_urls = normalized_message.image_urls
     
     processed_message_text = ""
     if isinstance(event, GroupMessageEvent):
@@ -228,12 +256,17 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
                     processed_message_text += f"{at_nickname} "
                 except Exception:
                     processed_message_text += ""
+            elif seg.type == "text":
+                processed_message_text += str(seg.data.get("text", ""))
+            elif seg.type == "image":
+                continue
             else:
                 processed_message_text += str(seg)
     else:
-        processed_message_text = event.get_plaintext()
+        processed_message_text = normalized_message.plain_text
 
     user_message = processed_message_text.strip()
+    user_record_content = user_message or (f"[图片消息 {len(image_urls)}张]" if image_urls else "")
   
     sender  = event.sender
     nickname = sender.card or sender.nickname
@@ -243,7 +276,7 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
         "role": "user",
         "nickname": event.sender.card or event.sender.nickname,
         "user_id":event.user_id,
-        "content": user_message,
+        "content": user_record_content,
         "group_id": getattr(event, "group_id", None),
         "time": time
     }
@@ -256,7 +289,8 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
             "user_id": event.user_id,
             "group_id": getattr(event, "group_id", None),
             "is_tome": event.is_tome(),
-            "message_preview": user_message[:120],
+            "message_preview": user_record_content[:120],
+            "image_count": len(image_urls),
         },
     )
     # user_message = event.get_plaintext().strip()
@@ -426,7 +460,21 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
     else:
         profile_text = ["这是首次认识"]
         logger.error("这个用户还没有画像")
-    related_knowledge = vector_db.search_db(user_message)
+
+    image_context = await build_image_context(image_urls)
+    llm_user_message = user_message
+    if image_context:
+        llm_user_message = (
+            f"{user_message or '用户发送了图片。'}\n\n"
+            f"[图片识别结果]\n{image_context}"
+        )
+    elif image_urls:
+        llm_user_message = (
+            f"{user_message or '用户发送了图片。'}\n\n"
+            "[图片识别结果]\n图片识别未返回可用结果。"
+        )
+
+    related_knowledge = vector_db.search_db(llm_user_message)
 
     try:
         messages_for_api = [
@@ -440,10 +488,10 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
             messages_for_api.append(msg)
                  
         #if  isinstance(event, GroupMessageEvent):
-        user_message = f"【{nickname}_{event.user_id}】：{user_message}"
+        formatted_user_message = f"【{nickname}_{event.user_id}】：{llm_user_message}"
         
         time = datetime.now().isoformat()
-        messages_for_api.append({"role": "user", "content": user_message,"time":time})
+        messages_for_api.append({"role": "user", "content": formatted_user_message,"time":time})
 
         response = await asyncio.wait_for(
             client.chat.completions.create(
@@ -463,7 +511,8 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
                 "user_id": event.user_id,
                 "group_id": getattr(event, "group_id", None),
                 "model": "deepseek-chat",
-                "input_preview": user_message[:120],
+                "input_preview": formatted_user_message[:120],
+                "image_context_preview": image_context[:240],
                 "profile_preview": str(profile_text)[:240],
                 "knowledge_preview": str(related_knowledge)[:320],
                 "history_turns": len(user_history),

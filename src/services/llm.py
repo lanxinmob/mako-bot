@@ -25,6 +25,14 @@ def get_deepseek_client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=settings.deepseek_api_key, base_url=settings.deepseek_base_url)
 
 
+@lru_cache
+def get_qwen_client() -> AsyncOpenAI:
+    settings = get_settings()
+    if not settings.qwen_api_key:
+        raise NotConfiguredError("DASHSCOPE_API_KEY or QWEN_API_KEY is not configured.")
+    return AsyncOpenAI(api_key=settings.qwen_api_key, base_url=settings.qwen_base_url)
+
+
 def has_openai() -> bool:
     settings = get_settings()
     return bool(settings.openai_api_key)
@@ -33,3 +41,8 @@ def has_openai() -> bool:
 def has_deepseek() -> bool:
     settings = get_settings()
     return bool(settings.deepseek_api_key)
+
+
+def has_qwen() -> bool:
+    settings = get_settings()
+    return bool(settings.qwen_api_key)
