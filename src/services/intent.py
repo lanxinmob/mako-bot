@@ -127,10 +127,41 @@ def decide_intents(
     if any(token in clean for token in ["天气", "气温"]):
         intents.append(IntentDecision(name="weather.query", args={"text": clean}))
 
+    explicit_search_tokens = ["搜索", "查一下", "帮我查", "搜一下", "联网", "网上", "google", "百度"]
+    fresh_tokens = ["最新", "新闻", "最近", "近期", "当前", "现任", "实时", "今天", "今日", "刚刚", "今年"]
+    fact_lookup_tokens = [
+        "是谁",
+        "是什么",
+        "多少",
+        "价格",
+        "报价",
+        "股价",
+        "汇率",
+        "官网",
+        "发布",
+        "更新",
+        "版本",
+        "排名",
+        "赛程",
+        "票房",
+        "政策",
+        "规定",
+        "开放",
+        "关闭",
+    ]
+    needs_fresh_search = any(token in clean for token in fresh_tokens) and any(
+        token in clean for token in fact_lookup_tokens
+    )
+
     if urls and any(token in clean for token in ["总结", "摘要", "链接内容", "这篇讲了什么"]):
         intents.append(IntentDecision(name="search.summarize_url", args={"url": urls[0]}))
-    elif any(token in clean for token in ["搜索", "查一下", "最新", "新闻", "google"]):
-        query = re.sub(r"^(搜索|查一下|google|最新|新闻)[:：]?", "", clean).strip() or clean
+    elif any(token in clean for token in explicit_search_tokens) or needs_fresh_search:
+        query = re.sub(
+            r"^(请|帮我|麻烦)?(搜索|查一下|帮我查|搜一下|联网|网上|google|百度)[:：]?",
+            "",
+            clean,
+            flags=re.IGNORECASE,
+        ).strip() or clean
         intents.append(IntentDecision(name="search.web", args={"query": query}))
 
     return _dedupe_intents(intents)
