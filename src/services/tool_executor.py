@@ -26,7 +26,7 @@ from src.services.intent import IntentDecision
 from src.services.language import detect_language, speech_to_text, text_to_speech, translate_text
 from src.services.llm import get_deepseek_client, get_openai_client, has_deepseek, has_openai
 from src.services.notes import NoteService
-from src.services.search import fetch_page_text, google_search
+from src.services.search import fetch_page_text, web_search
 from src.services.weather import get_weather
 
 
@@ -356,12 +356,15 @@ class ToolExecutor:
 
         if name == "search.web":
             query = args.get("query", text)
-            items = await google_search(query, num=5)
+            items = await web_search(query, num=5)
             if not items:
                 result.fact_lines.append("搜索结果为空。")
                 return True
-            lines = [f"- {item.title}\n  {item.link}\n  {item.snippet}" for item in items[:5]]
-            result.fact_lines.append("Google 搜索结果:\n" + "\n".join(lines))
+            lines = [
+                f"- {item.title}\n  {item.link}\n  来源: {item.source or 'search'}\n  {item.snippet}"
+                for item in items[:5]
+            ]
+            result.fact_lines.append("联网搜索结果:\n" + "\n".join(lines))
             return True
 
         if name == "search.summarize_url":

@@ -153,9 +153,11 @@ def decide_intents(
         token in clean for token in fact_lookup_tokens
     )
 
+    explicit_search = any(token in clean for token in explicit_search_tokens) or "google" in lower
+
     if urls and any(token in clean for token in ["总结", "摘要", "链接内容", "这篇讲了什么"]):
         intents.append(IntentDecision(name="search.summarize_url", args={"url": urls[0]}))
-    elif any(token in clean for token in explicit_search_tokens) or needs_fresh_search:
+    elif explicit_search or needs_fresh_search:
         query = re.sub(
             r"^(请|帮我|麻烦)?(搜索|查一下|帮我查|搜一下|联网|网上|google|百度)[:：]?",
             "",

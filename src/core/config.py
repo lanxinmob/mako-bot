@@ -58,10 +58,19 @@ class Settings(BaseSettings):
     # Tianxin
     tianxin_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("tianxin_key", "TIANXIN_KEY"))
 
-    # Google Custom Search
+    # Web Search
+    search_provider: Literal["google", "searxng"] = Field(
+        default="google", validation_alias=AliasChoices("SEARCH_PROVIDER")
+    )
     google_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("GOOGLE_API_KEY"))
     google_cx: Optional[str] = Field(default=None, validation_alias=AliasChoices("GOOGLE_CX", "GOOGLE_CSE_ID"))
     google_result_count: int = Field(default=5, validation_alias=AliasChoices("GOOGLE_RESULT_COUNT"))
+    searxng_base_url: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("SEARXNG_BASE_URL")
+    )
+    searxng_result_count: int = Field(
+        default=5, validation_alias=AliasChoices("SEARXNG_RESULT_COUNT", "SEARCH_RESULT_COUNT")
+    )
 
     # Amap
     amap_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("AMAP_KEY"))
