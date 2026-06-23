@@ -127,7 +127,23 @@ def decide_intents(
     if any(token in clean for token in ["天气", "气温"]):
         intents.append(IntentDecision(name="weather.query", args={"text": clean}))
 
-    explicit_search_tokens = ["搜索", "查一下", "帮我查", "搜一下", "联网", "网上", "google", "百度"]
+    explicit_search_tokens = [
+        "搜索",
+        "查一下",
+        "查一查",
+        "查下",
+        "查查",
+        "帮我查",
+        "帮忙查",
+        "搜一下",
+        "搜一搜",
+        "搜搜",
+        "帮我搜",
+        "联网",
+        "网上",
+        "google",
+        "百度",
+    ]
     fresh_tokens = ["最新", "新闻", "最近", "近期", "当前", "现任", "实时", "今天", "今日", "刚刚", "今年"]
     fact_lookup_tokens = [
         "是谁",
@@ -149,17 +165,29 @@ def decide_intents(
         "开放",
         "关闭",
     ]
+    live_result_tokens = [
+        "比分",
+        "赛果",
+        "战报",
+        "战绩",
+        "比赛结果",
+        "具体比分",
+        "几比几",
+        "谁赢了",
+        "赢了吗",
+    ]
     needs_fresh_search = any(token in clean for token in fresh_tokens) and any(
         token in clean for token in fact_lookup_tokens
     )
+    needs_live_result_search = any(token in clean for token in live_result_tokens)
 
     explicit_search = any(token in clean for token in explicit_search_tokens) or "google" in lower
 
     if urls and any(token in clean for token in ["总结", "摘要", "链接内容", "这篇讲了什么"]):
         intents.append(IntentDecision(name="search.summarize_url", args={"url": urls[0]}))
-    elif explicit_search or needs_fresh_search:
+    elif explicit_search or needs_fresh_search or needs_live_result_search:
         query = re.sub(
-            r"^(请|帮我|麻烦)?(搜索|查一下|帮我查|搜一下|联网|网上|google|百度)[:：]?",
+            r"^(请|帮我|麻烦|你能|能不能|可以)?(搜索|查一下|查一查|查下|查查|帮我查|帮忙查|搜一下|搜一搜|搜搜|帮我搜|联网|网上|google|百度)[:：]?",
             "",
             clean,
             flags=re.IGNORECASE,
