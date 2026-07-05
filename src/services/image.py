@@ -11,7 +11,7 @@ from nonebot.log import logger
 from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
 
 from src.core.config import get_settings
-from src.core.errors import NotConfiguredError
+from src.core.errors import ImageTooLargeError, NotConfiguredError
 from src.services.gemini import describe_image_with_gemini, has_gemini
 from src.services.llm import get_openai_client, get_qwen_client, has_openai, has_qwen
 
@@ -35,19 +35,38 @@ def _detect_mime(image_bytes: bytes) -> str:
     return "application/octet-stream"
 
 
-async def download_image_data(url: str) -> tuple[bytes, str]:
+async def download_image_data(url: str, max_size: Optional[int] = None) -> tuple[bytes, str]:
+    settings = get_settings()
+    max_bytes = max_size if max_size is not None else settings.image_max_download_bytes
+    timeout = settings.image_download_timeout
     headers = {"User-Agent": USER_AGENT}
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        # HEAD-first: check Content-Length before downloading the body
+        head_resp = await client.head(url, headers=headers)
+        content_length = head_resp.headers.get("content-length")
+        if content_length:
+            cl = int(content_length)
+            if cl > max_bytes:
+                raise ImageTooLargeError(
+                    f"Image too large: Content-Length={cl} bytes exceeds limit of {max_bytes} bytes"
+                )
         resp = await client.get(url, headers=headers)
         resp.raise_for_status()
-        content = resp.content
+        # Stream-read with manual truncation to avoid buffering over-limit data
+        content = b""
+        async for chunk in resp.aiter_bytes(chunk_size=65536):
+            content += chunk
+            if len(content) > max_bytes:
+                raise ImageTooLargeError(
+                    f"Image too large: downloaded {len(content)} bytes exceeds limit of {max_bytes} bytes"
+                )
         header_mime = resp.headers.get("content-type", "").split(";")[0].strip()
         mime = header_mime if header_mime.startswith("image/") else _detect_mime(content)
         return content, mime
 
 
-async def download_image_bytes(url: str) -> bytes:
-    content, _ = await download_image_data(url)
+async def download_image_bytes(url: str, max_size: Optional[int] = None) -> bytes:
+    content, _ = await download_image_data(url, max_size=max_size)
     return content
 
 
@@ -141,12 +160,32 @@ def _parse_resize_value(value: str) -> Tuple[Optional[int], Optional[int]]:
     return None, None
 
 
+def _validate_pil_dimensions(image: Image.Image) -> None:
+    """Reject images that exceed configured dimension/pixel limits BEFORE loading pixel data."""
+    settings = get_settings()
+    width, height = image.size
+    if width > settings.image_max_width or height > settings.image_max_height:
+        raise ImageTooLargeError(
+            f"Image dimensions {width}x{height} exceed limit "
+            f"{settings.image_max_width}x{settings.image_max_height}"
+        )
+    pixels = width * height
+    if pixels > settings.image_max_pixels:
+        raise ImageTooLargeError(
+            f"Image pixel count {pixels} exceeds limit of {settings.image_max_pixels}"
+        )
+
+
 def _process_image_sync(image_bytes: bytes, operation: str, value: Optional[str] = None) -> bytes:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             image = Image.open(BytesIO(image_bytes))
+            # Validate dimensions from header metadata BEFORE loading pixel data
+            _validate_pil_dimensions(image)
             image.load()
+    except ImageTooLargeError:
+        raise
     except (UnidentifiedImageError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
         logger.error(f"Invalid image payload: {exc}")
         return b""

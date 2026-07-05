@@ -12,3 +12,7 @@ class NotConfiguredError(ConfigError):
 
 class ExternalServiceError(AppError):
     """Raised when an external service call fails."""
+
+
+class ImageTooLargeError(AppError):
+    """Raised when an image exceeds configured size or dimension limits."""
