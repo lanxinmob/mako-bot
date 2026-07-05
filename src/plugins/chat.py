@@ -1,5 +1,6 @@
 import os
 import asyncio
+import time
 from nonebot import get_bot,on_message,on_command
 import google.generativeai as genai
 from nonebot import on_message
@@ -22,6 +23,18 @@ from src.services.storage import StorageService
 from src.utils.message import normalize_message
 load_dotenv()
 
+
+def _check_image_rate_limit(user_id: int) -> bool:
+    """Return True if the user is allowed to trigger image processing now."""
+    from src.core.config import get_settings
+    settings = get_settings()
+    now = time.time()
+    last = _image_rate_limit.get(user_id, 0.0)
+    if now - last < settings.image_rate_limit_seconds:
+        return False
+    _image_rate_limit[user_id] = now
+    return True
+
 def generate_job_id(group_id: int, user_id: int, remind_time: datetime):
     raw = f"{group_id}_{user_id}_{remind_time.isoformat()}"
     return f"reminder_{hashlib.md5(raw.encode()).hexdigest()}"
@@ -31,6 +44,10 @@ user_reminders: Dict[str, List[Dict[str, Any]]] = {}
 chat_histories: Dict[str, List[dict]] = {}
 MAX_HISTORY_TURNS = 50
 MAX_IMAGES_TO_DESCRIBE = 3
+
+# Per-user rate limiting for image operations (prevents CPU/memory saturation)
+_image_rate_limit: Dict[int, float] = {}
+
 MAX_SEARCH_RESULTS = 5
 MAX_SEARCH_CONTEXT_RESULTS = 3
 MAX_SEARCH_QUERIES = 3
@@ -227,19 +244,31 @@ async def build_image_context(image_urls: List[str]) -> str:
     if not image_urls:
         return ""
 
-    lines: List[str] = []
-    for idx, image_url in enumerate(image_urls[:MAX_IMAGES_TO_DESCRIBE], start=1):
+    urls = image_urls[:MAX_IMAGES_TO_DESCRIBE]
+
+    async def _describe_one(idx: int, url: str) -> str:
         try:
-            desc = await describe_image_url(image_url)
-            lines.append(f"第{idx}张图片：{desc or '图片识别没有返回可用描述。'}")
+            desc = await describe_image_url(url)
+            return f"第{idx}张图片：{desc or '图片识别没有返回可用描述。'}"
         except Exception as exc:
             logger.warning(f"图片识别失败({idx}): {exc}")
-            lines.append(f"第{idx}张图片识别失败：{exc}")
+            return f"第{idx}张图片识别失败：{exc}"
+
+    # Run image descriptions in parallel to reduce total wall-clock time
+    tasks = [_describe_one(i + 1, url) for i, url in enumerate(urls)]
+    lines = await asyncio.gather(*tasks, return_exceptions=True)
+
+    result: List[str] = []
+    for line in lines:
+        if isinstance(line, Exception):
+            result.append(f"图片识别异常: {line}")
+        elif isinstance(line, str):
+            result.append(line)
 
     remaining = len(image_urls) - MAX_IMAGES_TO_DESCRIBE
     if remaining > 0:
-        lines.append(f"还有{remaining}张图片未识别。")
-    return "\n".join(lines)
+        result.append(f"还有{remaining}张图片未识别。")
+    return "\n".join(result)
 
 
 def _search_query_with_image_hint(query: str, image_context: str) -> str:
@@ -818,7 +847,13 @@ async def handle_chat(matcher: Matcher, event: MessageEvent, bot: Bot):
         profile_text = ["这是首次认识"]
         logger.info("这个用户还没有画像 user_id={}", event.user_id)
 
-    image_context = await build_image_context(image_urls)
+    image_context = ""
+    if image_urls and _check_image_rate_limit(event.user_id):
+        image_context = await build_image_context(image_urls)
+    elif image_urls:
+        logger.info(
+            f"图片处理被速率限制拦截 user_id={event.user_id} image_count={len(image_urls)}"
+        )
     llm_user_message = user_message
     if image_context:
         llm_user_message = (

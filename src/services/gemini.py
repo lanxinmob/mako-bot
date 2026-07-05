@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 
 import httpx
@@ -23,6 +24,8 @@ async def describe_image_with_gemini(
 
     model = settings.gemini_vision_model
     endpoint = f"{settings.gemini_base_url}/models/{model}:generateContent"
+    # Offload base64 encoding to a thread to avoid blocking the event loop
+    encoded = await asyncio.to_thread(base64.b64encode, image_bytes)
     payload = {
         "contents": [
             {
@@ -31,7 +34,7 @@ async def describe_image_with_gemini(
                     {
                         "inlineData": {
                             "mimeType": mime_type,
-                            "data": base64.b64encode(image_bytes).decode("utf-8"),
+                            "data": encoded.decode("utf-8"),
                         }
                     },
                 ]

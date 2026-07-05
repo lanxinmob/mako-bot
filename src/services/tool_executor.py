@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -69,6 +70,19 @@ class ToolExecutor:
             "search.summarize_url",
             "map.query",
         }
+        self._temp_files: List[Path] = []
+
+    def _track_temp_file(self, path: Path) -> None:
+        self._temp_files.append(path)
+
+    def cleanup_temp_files(self) -> None:
+        """Remove all tracked temporary files. Call after messages are sent."""
+        for path in self._temp_files:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        self._temp_files.clear()
 
     def _is_enabled(self, tool_name: str) -> bool:
         if tool_name in self._disabled_names:
@@ -267,6 +281,8 @@ class ToolExecutor:
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
                 f.write(out)
                 path = Path(f.name)
+            # Track temp file for deferred cleanup after the message is sent
+            self._track_temp_file(path)
             result.fact_lines.append(
                 f"图片处理完成，操作={args.get('operation')} 参数={args.get('value', '')}".strip()
             )
@@ -288,6 +304,7 @@ class ToolExecutor:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
                 f.write(audio)
                 path = Path(f.name)
+            self._track_temp_file(path)
             result.fact_lines.append("已将文本转换成语音。")
             result.extra_messages.append(MessageSegment.record(file=str(path)))
             return True

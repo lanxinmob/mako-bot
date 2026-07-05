@@ -1,5 +1,7 @@
 .venv/
 lagrange/
+logs/
+WeatherIcon/
 
 __pycache__/
 *.pyc

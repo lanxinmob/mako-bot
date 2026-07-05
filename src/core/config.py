@@ -98,6 +98,32 @@ class Settings(BaseSettings):
     )
     stability_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("STABILITY_API_KEY"))
 
+    # Image safety (prevent OOM on low-memory instances)
+    image_max_download_bytes: int = Field(
+        default=10 * 1024 * 1024,  # 10 MB
+        validation_alias=AliasChoices("IMAGE_MAX_DOWNLOAD_BYTES"),
+    )
+    image_max_width: int = Field(
+        default=4096,
+        validation_alias=AliasChoices("IMAGE_MAX_WIDTH"),
+    )
+    image_max_height: int = Field(
+        default=4096,
+        validation_alias=AliasChoices("IMAGE_MAX_HEIGHT"),
+    )
+    image_max_pixels: int = Field(
+        default=8_847_360,  # ~4K (4096×2160)
+        validation_alias=AliasChoices("IMAGE_MAX_PIXELS"),
+    )
+    image_download_timeout: float = Field(
+        default=15.0,
+        validation_alias=AliasChoices("IMAGE_DOWNLOAD_TIMEOUT"),
+    )
+    image_rate_limit_seconds: int = Field(
+        default=30,
+        validation_alias=AliasChoices("IMAGE_RATE_LIMIT_SECONDS"),
+    )
+
     # Language
     deepl_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("DEEPL_KEY", "DEEPL_API_KEY"))
     baidu_translate_appid: Optional[str] = Field(default=None, validation_alias=AliasChoices("BAIDU_TRANSLATE_APPID"))
