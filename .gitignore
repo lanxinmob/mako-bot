@@ -5,6 +5,10 @@ WeatherIcon/
 
 __pycache__/
 *.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
 # Secrets — ignore .env and variants like .env.prod / .env.local
 # but keep .env.example trackable as the single source of truth
 .env

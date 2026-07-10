@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import imghdr
 import warnings
 from io import BytesIO
 from typing import Optional, Tuple
@@ -23,14 +22,19 @@ USER_AGENT = (
 
 
 def _detect_mime(image_bytes: bytes) -> str:
-    kind = imghdr.what(None, h=image_bytes)
-    if kind == "png":
+    """Detect common image types without the removed stdlib ``imghdr`` module."""
+
+    if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
-    if kind in {"jpeg", "jpg"}:
+    if image_bytes.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"
-    if kind == "gif":
+    if image_bytes.startswith((b"GIF87a", b"GIF89a")):
         return "image/gif"
-    if kind == "webp":
+    if (
+        len(image_bytes) >= 12
+        and image_bytes.startswith(b"RIFF")
+        and image_bytes[8:12] == b"WEBP"
+    ):
         return "image/webp"
     return "application/octet-stream"
 

@@ -8,7 +8,6 @@ gemini base64 offload, build_image_context parallelism, and edge cases.
 from __future__ import annotations
 
 import inspect
-import time
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -18,6 +17,7 @@ from PIL import Image
 
 from src.core.config import Settings, get_settings
 from src.core.errors import AppError, ImageTooLargeError
+from src.services.chat_context import ChatContextBuilder, ImageRateLimiter
 from src.services.image import (
     _process_image_sync,
     _validate_pil_dimensions,
@@ -341,72 +341,33 @@ class TestDownloadImageData:
 # ---------------------------------------------------------------------------
 # 6. Rate limiter
 # ---------------------------------------------------------------------------
-# We re-implement _check_image_rate_limit logic directly so we don't
-# trigger module-level side effects from importing src.plugins.chat.
-
-
 class TestImageRateLimiter:
-    """_check_image_rate_limit must allow first call and reject follow-ups
-    within the configured cooldown window."""
-
-    @staticmethod
-    def _check_image_rate_limit(
-        user_id: int,
-        rate_limit: dict[int, float],
-        rate_limit_seconds: int,
-        time_fn=time.time,
-    ) -> bool:
-        """Re-implementation of src.plugins.chat._check_image_rate_limit."""
-        now = time_fn()
-        last = rate_limit.get(user_id, 0.0)
-        if now - last < rate_limit_seconds:
-            return False
-        rate_limit[user_id] = now
-        return True
+    """ImageRateLimiter is directly testable without importing the plugin."""
 
     def test_first_call_allowed(self):
-        rl: dict[int, float] = {}
-        assert self._check_image_rate_limit(12345, rl, 30) is True
+        limiter = ImageRateLimiter(interval_seconds=30)
+        assert limiter.allow(12345, now=100.0) is True
 
     def test_rapid_second_call_blocked(self):
-        rl: dict[int, float] = {}
-        assert self._check_image_rate_limit(12345, rl, 30) is True
-        assert self._check_image_rate_limit(12345, rl, 30) is False
+        limiter = ImageRateLimiter(interval_seconds=30)
+        assert limiter.allow(12345, now=100.0) is True
+        assert limiter.allow(12345, now=101.0) is False
 
     def test_allowed_after_cooldown(self):
-        rl: dict[int, float] = {}
-        # short cooldown: 1 second
-        assert self._check_image_rate_limit(12345, rl, 1) is True
-        assert self._check_image_rate_limit(12345, rl, 1) is False
-
-        # simulate time passing
-        future = time.time() + 1.5
-        assert self._check_image_rate_limit(12345, rl, 1, time_fn=lambda: future) is True
+        limiter = ImageRateLimiter(interval_seconds=1)
+        assert limiter.allow(12345, now=100.0) is True
+        assert limiter.allow(12345, now=100.5) is False
+        assert limiter.allow(12345, now=101.5) is True
 
     def test_different_users_independent(self):
-        rl: dict[int, float] = {}
-        assert self._check_image_rate_limit(111, rl, 30) is True
-        assert self._check_image_rate_limit(222, rl, 30) is True
-        assert self._check_image_rate_limit(111, rl, 30) is False
-
-    def test_rate_limit_dict_grows(self):
-        rl: dict[int, float] = {}
-        for uid in range(5):
-            self._check_image_rate_limit(uid, rl, 30)
-        assert len(rl) == 5
+        limiter = ImageRateLimiter(interval_seconds=30)
+        assert limiter.allow(111, now=100.0) is True
+        assert limiter.allow(222, now=100.0) is True
+        assert limiter.allow(111, now=101.0) is False
 
     def test_uses_config_default_rate_limit_seconds(self):
-        """Verify that the source references settings.image_rate_limit_seconds."""
-        source = (Path(__file__).parent.parent / "src" / "plugins" / "chat.py").read_text()
-        assert "image_rate_limit_seconds" in source, (
-            "_check_image_rate_limit must reference settings.image_rate_limit_seconds"
-        )
-
-    def test_rate_limit_dict_declared_at_module_level(self):
-        source = (Path(__file__).parent.parent / "src" / "plugins" / "chat.py").read_text()
-        assert "_image_rate_limit" in source, (
-            "chat.py must declare _image_rate_limit module-level dict"
-        )
+        limiter = ImageRateLimiter()
+        assert limiter.interval_seconds == get_settings().image_rate_limit_seconds
 
 
 # ---------------------------------------------------------------------------
@@ -488,7 +449,7 @@ class TestTempFileTracking:
         """Verify via source that image.process calls _track_temp_file."""
         source = (
             Path(__file__).parent.parent / "src" / "services" / "tool_executor.py"
-        ).read_text()
+        ).read_text(encoding="utf-8")
         # After the image.process block there should be _track_temp_file
         assert "image.process" in source
         # The _track_temp_file call should appear near the NamedTemporaryFile usage
@@ -498,7 +459,7 @@ class TestTempFileTracking:
         """Verify via source that language.tts calls _track_temp_file."""
         source = (
             Path(__file__).parent.parent / "src" / "services" / "tool_executor.py"
-        ).read_text()
+        ).read_text(encoding="utf-8")
         assert "language.tts" in source
 
 
@@ -530,43 +491,88 @@ class TestGeminiBase64Offload:
 
 
 class TestBuildImageContext:
-    """build_image_context must use asyncio.gather for parallel descriptions."""
+    """Image enrichment is tested through its public service contract."""
 
-    _CHAT_SOURCE: str | None = None
+    class NoSearch:
+        async def build(self, *args, **kwargs):
+            return ""
 
-    @classmethod
-    def _get_chat_source(cls) -> str:
-        if cls._CHAT_SOURCE is None:
-            cls._CHAT_SOURCE = (
-                Path(__file__).parent.parent / "src" / "plugins" / "chat.py"
-            ).read_text()
-        return cls._CHAT_SOURCE
+    @pytest.mark.asyncio
+    async def test_empty_urls_returns_empty(self):
+        builder = ChatContextBuilder(search_builder=self.NoSearch())
+        result = await builder.build(user_id=1, user_text="hello", image_urls=[], history=[])
+        assert result.image_context == ""
+        assert result.llm_text == "hello"
 
-    def test_empty_urls_returns_empty(self):
-        """Verify build_image_context handles empty list via source inspection."""
-        source = self._get_chat_source()
-        assert "if not image_urls:" in source
-        assert 'return ""' in source
+    @pytest.mark.asyncio
+    async def test_describes_images_concurrently(self):
+        active = 0
+        max_active = 0
 
-    def test_uses_asyncio_gather(self):
-        source = self._get_chat_source()
-        assert "asyncio.gather(" in source, (
-            "build_image_context must use asyncio.gather for parallel image descriptions"
+        async def describe(url: str) -> str:
+            nonlocal active, max_active
+            active += 1
+            max_active = max(max_active, active)
+            await __import__("asyncio").sleep(0)
+            active -= 1
+            return url
+
+        builder = ChatContextBuilder(
+            search_builder=self.NoSearch(),
+            image_limiter=ImageRateLimiter(interval_seconds=0),
+            describe=describe,
         )
+        result = await builder.build(
+            user_id=1,
+            user_text="",
+            image_urls=["a", "b", "c"],
+            history=[],
+        )
+        assert max_active == 3
+        assert "第1张图片：a" in result.image_context
 
-    def test_caps_to_max_images(self):
-        source = self._get_chat_source()
-        assert "MAX_IMAGES_TO_DESCRIBE" in source
+    @pytest.mark.asyncio
+    async def test_caps_images_and_reports_remaining_count(self):
+        seen = []
 
-    def test_handles_exceptions(self):
-        """Via source: individual failures logged, not propagated."""
-        source = self._get_chat_source()
-        assert "return_exceptions=True" in source
+        async def describe(url: str) -> str:
+            seen.append(url)
+            return url
 
-    def test_remaining_count_reported(self):
-        source = self._get_chat_source()
-        assert "remaining" in source.lower()
-        assert "未识别" in source
+        builder = ChatContextBuilder(
+            search_builder=self.NoSearch(),
+            image_limiter=ImageRateLimiter(interval_seconds=0),
+            describe=describe,
+        )
+        result = await builder.build(
+            user_id=1,
+            user_text="看图",
+            image_urls=["1", "2", "3", "4", "5"],
+            history=[],
+        )
+        assert seen == ["1", "2", "3"]
+        assert "还有2张图片未识别" in result.image_context
+
+    @pytest.mark.asyncio
+    async def test_individual_description_failure_is_isolated(self):
+        async def describe(url: str) -> str:
+            if url == "bad":
+                raise RuntimeError("broken")
+            return url
+
+        builder = ChatContextBuilder(
+            search_builder=self.NoSearch(),
+            image_limiter=ImageRateLimiter(interval_seconds=0),
+            describe=describe,
+        )
+        result = await builder.build(
+            user_id=1,
+            user_text="看图",
+            image_urls=["ok", "bad"],
+            history=[],
+        )
+        assert "第1张图片：ok" in result.image_context
+        assert "第2张图片识别失败：broken" in result.image_context
 
 
 # ---------------------------------------------------------------------------

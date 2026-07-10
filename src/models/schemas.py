@@ -17,6 +17,20 @@ class ChatRecord(BaseModel):
     time: datetime = Field(default_factory=datetime.now)
 
 
+OutboundTargetType = Literal["group", "private"]
+
+
+class OutboundMessageRecord(BaseModel):
+    message_id: str
+    target_type: OutboundTargetType
+    target_id: int
+    intent: str = "other"
+    content: str
+    normalized_content: str = ""
+    source: str = "unknown"
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
 class NoteRecord(BaseModel):
     note_id: str
     user_id: int
@@ -55,6 +69,7 @@ class RelationshipMemory(BaseModel):
     status: RelationshipStatus = "active"
     confidence: float = 0.8
     created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
     due_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
 

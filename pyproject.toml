@@ -21,6 +21,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "requests>=2.32.0",
     "numpy>=1.26.0",
+    "pillow>=10.0.0",
     "sentence-transformers>=3.0.0",
 ]
 

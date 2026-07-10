@@ -4,6 +4,50 @@ import requests
 from nonebot_plugin_apscheduler import scheduler
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from src.core.config import get_settings
+from src.models.schemas import ChatRecord
+from src.services.outbound_dedup import OutboundDedupService
+from src.services.storage import StorageService
+from datetime import datetime
+
+
+_storage = StorageService()
+_outbound_dedup = OutboundDedupService(_storage)
+
+
+def _plain_text(message) -> str:
+    if isinstance(message, Message):
+        return message.extract_plain_text()
+    return str(message)
+
+
+async def _send_scheduled_group_message(bot, group_id, message, *, intent: str, source: str) -> bool:
+    if not group_id:
+        return False
+    content = _plain_text(message)
+    decision = _outbound_dedup.check(
+        target_type="group",
+        target_id=group_id,
+        intent=intent,
+        content=content,
+    )
+    if not decision.allowed:
+        print(
+            f"跳过相似定时消息 group={group_id} intent={intent} "
+            f"similarity={decision.similarity:.3f}"
+        )
+        return False
+    await bot.send_group_msg(group_id=group_id, message=message)
+    _outbound_dedup.record(
+        target_type="group",
+        target_id=group_id,
+        intent=intent,
+        content=content,
+        source=source,
+    )
+    _storage.append_global_record(
+        ChatRecord(role="assistant", content=content, group_id=group_id, time=datetime.now())
+    )
+    return True
 
 @scheduler.scheduled_job("cron", hour=7, minute=0)
 async def good_morning_mako():
@@ -17,9 +61,16 @@ async def good_morning_mako():
         "起床啦！别赖床，茉子等你来捣乱~(｀∀´)σ不然茉子要捉弄你了~(￣▽￣)σ",
         "太阳都晒屁股了，快起床和茉子一起学习~(｡>∀<｡)",
         ]
-        await bot.send_group_msg(group_id=group_id, message=random.choice(message))
+        selected = random.choice(message)
+        sent = await _send_scheduled_group_message(
+            bot,
+            group_id,
+            selected,
+            intent="greeting",
+            source="scheduler.good_morning",
+        )
         
-        print(f"已成功发送早安问候到群 {group_id}")
+        print(f"已成功发送早安问候到群 {group_id}" if sent else f"早安问候未发送到群 {group_id}")
         
     except Exception as e:
         print(f"发送早安问候失败: {e}")
@@ -109,7 +160,13 @@ async def send_daily_digest():
         message.append("---")
 
         #message = "\n".join(msg)
-        await bot.send_group_msg(group_id=group_id, message=message)
+        await _send_scheduled_group_message(
+            bot,
+            group_id,
+            message,
+            intent="daily_digest",
+            source="scheduler.daily_digest",
+        )
 
     except Exception as e:
        print(f"未成功发送精选文章：{e}") 

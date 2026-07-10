@@ -14,6 +14,7 @@ from src.models.schemas import (
     ThoughtTrace,
 )
 from src.services.storage import StorageService
+from src.services.mako_context import default_mako_profile
 from src.web.dashboard.schemas import AutonomySummary, DashboardSummary
 
 
@@ -529,18 +530,7 @@ class DashboardService:
         return profiles[0] if profiles else None
 
     def _default_profile(self) -> BotProfile:
-        return BotProfile(
-            profile_id="mako",
-            name="茉子",
-            summary="正在从受限主动行动，升级为可观察、可审计、会反思的自主意志 v1。",
-            persona="常陆茉子风格的忍者手账员：轻快、认真、会撒娇但守边界。",
-            values=["谨慎", "温柔", "守边界", "有自己的判断", "不把 owner 的私聊暴露给别人"],
-            boundaries=["只信任 owner", "只对白名单目标主动行动", "中风险先问", "高风险沉默", "不展示隐藏推理链"],
-            current_stage="自主意志 v1 修行中",
-            autonomy_statement="我可以自己观察、判断和行动；当我不确定是否该说时，会先问 owner。",
-            capabilities=["长期记忆", "人物画像", "关系记忆", "自主决策", "owner 审批", "进度审计"],
-            limitations=["反馈学习仍在建设", "自我反思还需要稳定事件闭环", "关系记忆主链路仍需加强"],
-        )
+        return default_mako_profile()
 
     def _default_goals(self) -> list[AutonomyGoal]:
         return [

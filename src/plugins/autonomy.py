@@ -20,6 +20,8 @@ from src.core.prompts import MAKO_SYSTEM_PROMPT
 from src.models.schemas import ChatRecord
 from src.services.governance import GovernanceService
 from src.services.llm import get_deepseek_client, has_deepseek
+from src.services.mako_context import MakoRuntimeContext
+from src.services.outbound_dedup import OutboundDedupService, canonical_intent
 from src.services.redis import get_redis
 from src.services.storage import StorageService
 
@@ -37,6 +39,7 @@ class AutonomyDecision:
     risk: Risk
     message: str
     reason: str
+    intent: str = "other"
 
 
 @dataclass
@@ -47,6 +50,7 @@ class PendingAction:
     message: str
     reason: str
     created_at: float
+    intent: str = "other"
 
 
 @dataclass
@@ -67,6 +71,8 @@ class WhitelistCommand:
 settings = get_settings()
 storage = StorageService()
 governance = GovernanceService()
+outbound_dedup = OutboundDedupService(storage)
+runtime_context = MakoRuntimeContext(storage)
 redis_client = get_redis()
 
 pending_memory: Dict[str, PendingAction] = {}
@@ -337,6 +343,7 @@ def parse_decision(data: dict) -> AutonomyDecision:
         risk=risk,
         message=str(data.get("message") or "").strip(),
         reason=str(data.get("reason") or "没有给出原因").strip(),
+        intent=canonical_intent(str(data.get("intent") or "other"), str(data.get("message") or "")),
     )
 
 
@@ -371,6 +378,7 @@ def apply_target_hint(decision: AutonomyDecision, hint: TargetHint) -> AutonomyD
             risk="medium",
             message=decision.message,
             reason=f"{hint.reason}，茉子需要先问清楚目标。",
+            intent=decision.intent,
         )
     if hint.target_id is None or hint.target_type == "none":
         return decision
@@ -659,6 +667,8 @@ async def decide(suggestion: Optional[str] = None) -> AutonomyDecision:
     target_hint = extract_target_hint(suggestion or "")
     recent_records = storage.get_recent_global_records(hours=settings.autonomy_context_hours)
     context = format_records(recent_records)
+    participant_ids = [record.user_id for record in recent_records if record.user_id is not None]
+    persistent_context = runtime_context.build_for_autonomy(participant_ids)
     prompt = f"""
 你是常陆茉子自主行动决策器。你要判断自己是否应该主动发言，而不是服从任何人的转发命令。
 
@@ -673,6 +683,8 @@ async def decide(suggestion: Optional[str] = None) -> AutonomyDecision:
 - 高风险、骚扰、刷屏、敏感、目标不清且无法判断时选择 silent 或 ask_owner。
 - 你可以有自己的意志：如果时机自然、低风险、像你自己想说的话，可以 speak。
 - message 是真正要发送给目标的话，必须符合常陆茉子口吻，2 到 4 句，25 到 90 个中文字符，不要 Markdown。
+- intent 必须从 greeting|check_in|reminder|comfort|topic_share|daily_digest|other 中选择。
+- 相同关系记忆只属于标明的 user_id，不得把一个人的偏好、事件或承诺套到另一个人身上。
 
 谨慎档：
 - 高置信低风险才 speak。
@@ -688,6 +700,9 @@ owner 建议：
 近期上下文：
 {context}
 
+持续身份、关系、承诺与目标：
+{persistent_context}
+
 只返回 JSON，不要写解释文本。格式：
 {{
   "action": "speak|ask_owner|silent",
@@ -695,6 +710,7 @@ owner 建议：
   "target_id": 123,
   "confidence": 0.0,
   "risk": "low|medium|high",
+  "intent": "greeting|check_in|reminder|comfort|topic_share|daily_digest|other",
   "message": "准备发送的内容",
   "reason": "简短原因"
 }}
@@ -741,6 +757,7 @@ owner 建议：
                 "target_id": decision.target_id,
                 "confidence": decision.confidence,
                 "risk": decision.risk,
+                "intent": decision.intent,
                 "reason": decision.reason,
                 "message_preview": decision.message[:160],
             },
@@ -762,6 +779,7 @@ async def ask_owner(bot: Bot, decision: AutonomyDecision) -> None:
         message=decision.message,
         reason=decision.reason,
         created_at=now_ts(),
+        intent=decision.intent,
     )
     save_pending(pending)
     append_progress_event(
@@ -787,7 +805,15 @@ async def ask_owner_clarification(bot: Bot, text: str, decision: AutonomyDecisio
     append_log("ask_owner_clarification", {"text": text, "decision": asdict(decision)})
 
 
-async def send_action(bot: Bot, target_type: TargetType, target_id: int, message: str, reason: str) -> bool:
+async def send_action(
+    bot: Bot,
+    target_type: TargetType,
+    target_id: int,
+    message: str,
+    reason: str,
+    *,
+    intent: str = "other",
+) -> bool:
     if not target_allowed(target_type, target_id):
         append_log("send_rejected", {"reason": "target not allowed", "target_type": target_type, "target_id": target_id})
         append_progress_event(
@@ -804,7 +830,32 @@ async def send_action(bot: Bot, target_type: TargetType, target_id: int, message
             {"reason": "cooldown", "target_type": target_type, "target_id": target_id},
         )
         return False
-    access = governance.can_chat(settings.autonomy_owner_id, target_id if target_type == "group" else None)
+    dedup = outbound_dedup.check(
+        target_type=target_type,
+        target_id=target_id,
+        intent=intent,
+        content=message,
+    )
+    if not dedup.allowed:
+        payload = {
+            "reason": "semantic duplicate",
+            "target_type": target_type,
+            "target_id": target_id,
+            "intent": canonical_intent(intent, message),
+            "similarity": dedup.similarity,
+            "matched_message_id": dedup.matched_message_id,
+        }
+        append_log("send_rejected", payload)
+        append_progress_event(
+            "send_rejected",
+            f"自主行动发送被拒绝：{settings.outbound_dedup_hours} 小时内存在相似表达。",
+            payload,
+        )
+        return False
+    access = governance.can_chat(
+        settings.autonomy_owner_id if target_type == "group" else target_id,
+        target_id if target_type == "group" else None,
+    )
     if not access.allowed:
         append_log("send_rejected", {"reason": access.reason, "target_type": target_type, "target_id": target_id})
         return False
@@ -821,6 +872,13 @@ async def send_action(bot: Bot, target_type: TargetType, target_id: int, message
         return False
     governance.consume_cost(settings.autonomy_owner_id, cost)
     set_cooldown(target_type, target_id)
+    outbound_dedup.record(
+        target_type=target_type,
+        target_id=target_id,
+        intent=intent,
+        content=message,
+        source="autonomy",
+    )
     storage.append_global_record(
         ChatRecord(
             role="assistant",
@@ -889,7 +947,14 @@ async def handle_decision(bot: Bot, decision: AutonomyDecision) -> str:
         append_log("silent", {"reason": "empty message", "decision": asdict(decision)})
         return "silent"
     if should_act_directly(decision):
-        sent = await send_action(bot, decision.target_type, decision.target_id, decision.message, decision.reason)
+        sent = await send_action(
+            bot,
+            decision.target_type,
+            decision.target_id,
+            decision.message,
+            decision.reason,
+            intent=decision.intent,
+        )
         return "sent" if sent else "rejected"
     if should_ask_owner(decision):
         await ask_owner(bot, decision)
@@ -932,7 +997,14 @@ async def process_owner_private(bot: Bot, matcher: Matcher, event: PrivateMessag
             append_log("cancelled", {"pending": asdict(pending)})
             return True
         message = replacement or pending.message
-        sent = await send_action(bot, pending.target_type, pending.target_id, message, pending.reason)
+        sent = await send_action(
+            bot,
+            pending.target_type,
+            pending.target_id,
+            message,
+            pending.reason,
+            intent=pending.intent,
+        )
         delete_pending(pending.pending_id)
         await matcher.send("发出去啦。" if sent else "这次没发出去，目标或冷却规则没通过。")
         return True
