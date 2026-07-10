@@ -6,7 +6,7 @@
   
 # 🌸 Mako-Bot 
 
-✨基于 [NoneBot2](https://github.com/nonebot/nonebot2) 和 [Lagrange.OneBot](https://github.com/LagrangeDev/Lagrange.Core) 的 QQ 聊天机器人✨
+✨基于 [NoneBot2](https://github.com/nonebot/nonebot2) 和 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 的 QQ 聊天机器人✨
 </div>
 
 <p align="center">
@@ -60,7 +60,7 @@
 
 ## ⚙️ 架构说明
 
-整体分为 **消息接入层**（Lagrange.OneBot）+ **逻辑层**（NoneBot2 + 插件）+ **记忆与知识存储**（Redis + 向量数据库）：
+整体分为 **消息接入层**（NapCatQQ）+ **逻辑层**（NoneBot2 + 插件）+ **记忆与知识存储**（Redis + 向量数据库）：
 
 ```
 ┌───────────────┐
@@ -70,7 +70,7 @@
         │ NTQQ 协议
         │
 ┌───────┴─────────┐     反向 WebSocket     ┌──────────────┐
-│  Lagrange.OneBot │◀──────────────────────▶│   NoneBot2   │
+│    NapCatQQ     │◀──────────────────────▶│   NoneBot2   │
 └──────────────────┘                         └───────▲──────┘
                                                    │ 插件机制
                                                    │
@@ -79,12 +79,10 @@
                                     └─────────────────────────────┘
 ```
 
-* **Lagrange.Core**：实现 NTQQ 协议，连接 QQ 并接收/发送消息。
-* **Lagrange.OneBot**：实现 OneBot V11 协议，与 NoneBot2 对接。
+* **NapCatQQ**：实现 NTQQ 协议，连接 QQ 并接收/发送消息，内置 OneBot V11 协议支持，与 NoneBot2 对接。
 * **NoneBot2**：核心框架，负责插件管理与事件分发。
 * **Redis**：存储用户画像、群聊记忆、向量知识库。
----
-因为 Lagrange.onebot 暂时终止，已替换为使用 NapCatQQ 
+使用 NapCatQQ 作为 QQ 协议实现。
 
 ## 🚀 快速开始
 
@@ -114,10 +112,8 @@ docker run -d --name redis-stack -p 6379:6379 -p 8001:8001 redis/redis-stack:lat
 HOST=127.0.0.1
 PORT=8080
 
-# Lagrange 配置
-LAGRANGE_QQ=你的QQ号
-LAGRANGE_PASSWORD=""  # 留空则扫码登录
-LAGRANGE_PROTOCOL="Android"       
+# QQ / NapCatQQ 配置
+QQ_ID=你的QQ号
 
 # 模型配置
 GEMINI_API_KEY =''
@@ -140,9 +136,9 @@ nb plugin install nonebot_plugin_lagrange
 ```
 nb run
 ```
-### 7. 启动 Lagrange
+### 7. 启动 NapCatQQ
 
-运行 Lagrange.exe 或 Docker 容器，扫码登录 QQ。
+运行 NapCatQQ 或 Docker 容器，扫码登录 QQ。
 
 ##  系统提示词（System Prompt）
 

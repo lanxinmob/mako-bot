@@ -5,6 +5,7 @@ from nonebot.exception import FinishedException
 from nonebot.params import ArgPlainText, CommandArg
 from nonebot.adapters.onebot.v11 import Message,MessageSegment
 import os
+from src.core.config import get_settings
 weather_handler = on_command("天气", aliases={"weather"},priority=10,block=True)
 
 @weather_handler.handle()
@@ -21,7 +22,7 @@ async def handle_get_weather(city: str = ArgPlainText()):
 
     try:
 
-        url = f"https://{os.getenv('your_api_host')}/geo/v2/city/lookup?location={city}&key={os.getenv('your_api')}"
+        url = f"https://{get_settings().qweather_host}/geo/v2/city/lookup?location={city}&key={get_settings().qweather_key}"
         #headers = {f"Authorization: Bearer {os.getenv("your_token")}"}
         async with httpx.AsyncClient() as client:
             resp = await client.get(url)
@@ -34,7 +35,7 @@ async def handle_get_weather(city: str = ArgPlainText()):
         
         location_id = data_place["location"][0]["id"]
 
-        url = f"https://{os.getenv('your_api_host')}/v7/weather/now?location={location_id}&key={os.getenv('your_api')}"
+        url = f"https://{get_settings().qweather_host}/v7/weather/now?location={location_id}&key={get_settings().qweather_key}"
         #headers = {f"Authorization: Bearer {os.getenv("your_token")}"}
         async with httpx.AsyncClient() as client:
             resp = await client.get(url)
