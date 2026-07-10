@@ -209,6 +209,19 @@ class Settings(BaseSettings):
     autonomy_context_hours: int = Field(default=2, validation_alias=AliasChoices("AUTONOMY_CONTEXT_HOURS"))
     autonomy_context_limit: int = Field(default=30, validation_alias=AliasChoices("AUTONOMY_CONTEXT_LIMIT"))
 
+    # Successful outbound-message ledger. Frequency cooldown and semantic
+    # repetition are separate controls: a message may be outside the short
+    # cooldown and still be too similar to something sent earlier that day.
+    outbound_dedup_hours: int = Field(default=18, validation_alias=AliasChoices("OUTBOUND_DEDUP_HOURS"))
+    outbound_dedup_similarity: float = Field(
+        default=0.82,
+        validation_alias=AliasChoices("OUTBOUND_DEDUP_SIMILARITY"),
+    )
+    outbound_dedup_max_records: int = Field(
+        default=200,
+        validation_alias=AliasChoices("OUTBOUND_DEDUP_MAX_RECORDS"),
+    )
+
     def build_redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 

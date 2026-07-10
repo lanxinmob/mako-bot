@@ -14,6 +14,7 @@ from src.models.schemas import (
     BotProfile,
     ChatRecord,
     NoteRecord,
+    OutboundMessageRecord,
     RelationshipMemory,
     ThoughtTrace,
 )
@@ -24,6 +25,7 @@ from src.services.redis import get_redis
 class MemoryStorage:
     histories: Dict[str, List[dict]] = field(default_factory=dict)
     all_memory: List[str] = field(default_factory=list)
+    outbound_messages: Dict[str, List[dict]] = field(default_factory=dict)
     profiles: Dict[str, str] = field(default_factory=dict)
     notes: Dict[int, Dict[str, dict]] = field(default_factory=dict)
     bot_profiles: Dict[str, dict] = field(default_factory=dict)
@@ -51,6 +53,18 @@ class StorageService:
     def get_history(self, session_id: str) -> List[dict]:
         if self.redis:
             raw = self.redis.get(f"chat:history:{session_id}")
+            if not raw:
+                # Compatibility with the original chat.py, which stored
+                # histories under the unprefixed session id.  Migrate on read
+                # so deploying the refactor does not reset active chats.
+                raw = self.redis.get(session_id)
+                if raw:
+                    try:
+                        history = json.loads(raw)
+                    except Exception:
+                        return []
+                    self.save_history(session_id, history)
+                    return history
             if raw:
                 try:
                     return json.loads(raw)
@@ -104,6 +118,51 @@ class StorageService:
                 continue
             if record.time.timestamp() >= threshold:
                 records.append(record)
+        return records
+
+    def record_outbound_message(self, record: OutboundMessageRecord) -> OutboundMessageRecord:
+        key = f"outbound:ledger:{record.target_type}:{record.target_id}"
+        payload = json.dumps(record.model_dump(mode="json"), ensure_ascii=False)
+        max_records = max(20, self.settings.outbound_dedup_max_records)
+        if self.redis:
+            self.redis.rpush(key, payload)
+            self.redis.ltrim(key, -max_records, -1)
+            self.redis.expire(key, max(86400, self.settings.outbound_dedup_hours * 7200))
+            return record
+        rows = _memory.outbound_messages.setdefault(key, [])
+        rows.append(record.model_dump(mode="json"))
+        del rows[:-max_records]
+        return record
+
+    def list_recent_outbound_messages(
+        self,
+        target_type: str,
+        target_id: int,
+        *,
+        hours: Optional[int] = None,
+        limit: Optional[int] = None,
+        now: Optional[datetime] = None,
+    ) -> List[OutboundMessageRecord]:
+        key = f"outbound:ledger:{target_type}:{target_id}"
+        limit = max(1, limit or self.settings.outbound_dedup_max_records)
+        if self.redis:
+            rows = self.redis.lrange(key, -limit, -1)
+        else:
+            rows = [
+                json.dumps(item, ensure_ascii=False)
+                for item in _memory.outbound_messages.get(key, [])[-limit:]
+            ]
+        current = now or datetime.now()
+        threshold = current.timestamp() - max(1, hours or self.settings.outbound_dedup_hours) * 3600
+        records: List[OutboundMessageRecord] = []
+        for row in rows:
+            try:
+                record = OutboundMessageRecord.model_validate_json(row)
+            except Exception:
+                continue
+            if record.created_at.timestamp() >= threshold:
+                records.append(record)
+        records.sort(key=lambda item: item.created_at, reverse=True)
         return records
 
     def get_profile(self, user_id: int) -> Optional[dict]:
@@ -457,6 +516,50 @@ class StorageService:
         memories.sort(key=lambda x: x.created_at, reverse=True)
         return memories[:limit]
 
+    def get_relationship_memory(self, user_id: int, memory_id: str) -> Optional[RelationshipMemory]:
+        key = f"relationship:{user_id}"
+        if self.redis:
+            raw = self.redis.hget(key, memory_id)
+            if not raw:
+                return None
+            try:
+                return RelationshipMemory.model_validate_json(raw)
+            except Exception:
+                return None
+        data = _memory.relationship_memories.get(user_id, {}).get(memory_id)
+        return RelationshipMemory.model_validate(data) if data else None
+
+    def update_relationship_memory(
+        self,
+        user_id: int,
+        memory_id: str,
+        content: str,
+    ) -> Optional[RelationshipMemory]:
+        memory = self.get_relationship_memory(user_id, memory_id)
+        if not memory:
+            return None
+        memory.content = content.strip()
+        memory.updated_at = datetime.now()
+        key = f"relationship:{user_id}"
+        payload = json.dumps(memory.model_dump(mode="json"), ensure_ascii=False)
+        if self.redis:
+            self.redis.hset(key, memory_id, payload)
+            return memory
+        _memory.relationship_memories.setdefault(user_id, {})[memory_id] = memory.model_dump(mode="json")
+        return memory
+
+    def delete_relationship_memory(self, user_id: int, memory_id: str) -> bool:
+        key = f"relationship:{user_id}"
+        if not self.get_relationship_memory(user_id, memory_id):
+            return False
+        if self.redis:
+            deleted = bool(self.redis.hdel(key, memory_id))
+            self.redis.zrem("relationship:followups", f"{user_id}:{memory_id}")
+            return deleted
+        deleted = _memory.relationship_memories.get(user_id, {}).pop(memory_id, None) is not None
+        _memory.relationship_followups.pop(memory_id, None)
+        return deleted
+
     def mark_relationship_done(self, user_id: int, memory_id: str) -> bool:
         key = f"relationship:{user_id}"
         if self.redis:
@@ -469,6 +572,7 @@ class StorageService:
                 return False
             mem.status = "done"
             mem.last_used_at = datetime.now()
+            mem.updated_at = datetime.now()
             self.redis.hset(key, memory_id, json.dumps(mem.model_dump(mode="json"), ensure_ascii=False))
             self.redis.zrem("relationship:followups", f"{user_id}:{memory_id}")
             return True
@@ -478,6 +582,7 @@ class StorageService:
             return False
         data["status"] = "done"
         data["last_used_at"] = datetime.now().isoformat()
+        data["updated_at"] = datetime.now().isoformat()
         _memory.relationship_followups.pop(memory_id, None)
         return True
 
