@@ -1,4 +1,3 @@
-import os
 import asyncio
 import time
 from nonebot import get_bot,on_message,on_command
@@ -12,16 +11,15 @@ from nonebot_plugin_apscheduler import scheduler
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment
 import json
 from datetime import datetime, timedelta, timezone
-from dotenv import load_dotenv
 import hashlib
 from src.plugins import vector_db
+from src.core.config import get_settings
 from src.services.image import describe_image_url
 from src.services.intent import decide_intents
 from src.services.redis import get_redis
 from src.services.search import fetch_page_text, web_search
 from src.services.storage import StorageService
 from src.utils.message import normalize_message
-load_dotenv()
 
 
 def _check_image_rate_limit(user_id: int) -> bool:
@@ -127,9 +125,10 @@ def safe_redis_rpush(key: str, value: str) -> bool:
 
 """deepseek"""
 from openai import AsyncOpenAI
+_settings = get_settings()
 client = AsyncOpenAI(
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-    base_url="https://api.deepseek.com/v1"
+    api_key=_settings.deepseek_api_key,
+    base_url=_settings.deepseek_base_url
 )
 
 MAKO_SYSTEM_PROMPT = """

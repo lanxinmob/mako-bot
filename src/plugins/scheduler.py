@@ -1,18 +1,16 @@
 from nonebot import get_bot
 import random
-import os
 import requests
 from nonebot_plugin_apscheduler import scheduler
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
-from dotenv import load_dotenv
-load_dotenv()
+from src.core.config import get_settings
 
 @scheduler.scheduled_job("cron", hour=7, minute=0)
 async def good_morning_mako():
     try:
 
         bot = get_bot()
-        group_id = os.getenv("GROUP_ID")
+        group_id = get_settings().default_group_id
         message  = [
         "早上好哦，各位~！今天也是元气满满的一天，有没有想念茉子大人呀？(｡>∀<｡)",
         "早上好！今天也是元气满满的一天哦~(｡>∀<｡)",
@@ -56,7 +54,7 @@ def fetch_juejin(limit=2):
 def fetch_tianxin(api_name,limit=2):
     try:
         url = f"https://api.tianapi.com/{api_name}/index"
-        payload={"key":os.getenv("tianxin_key"),"num":limit}
+        payload={"key":get_settings().tianxin_key,"num":limit}
         rep = requests.post(url,data=payload)
         rep.raise_for_status()
         
@@ -81,7 +79,7 @@ def fetch_tianxin(api_name,limit=2):
 async def send_daily_digest():
     try:
         bot = get_bot()
-        group_id = os.getenv("GROUP_ID")
+        group_id = get_settings().default_group_id
 
         tech_news = fetch_juejin(limit=2)
         game_news = fetch_tianxin(api_name='game',limit=10)

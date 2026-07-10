@@ -5,4 +5,8 @@ WeatherIcon/
 
 __pycache__/
 *.pyc
-.env*
+# Secrets — ignore .env and variants like .env.prod / .env.local
+# but keep .env.example trackable as the single source of truth
+.env
+.env.*
+!.env.example
