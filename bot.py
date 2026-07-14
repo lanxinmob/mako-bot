@@ -1,20 +1,13 @@
-import nonebot
-from nonebot.adapters.onebot.v11 import Adapter as OneBotV11Adapter
+"""Source-checkout compatibility entrypoint.
+
+Production installations can invoke the equivalent ``mako-bot`` console
+command declared in ``pyproject.toml``.
+"""
+
+from src.app import bootstrap_application, main
 
 
-nonebot.init()
-
-# 注册适配器
-driver = nonebot.get_driver()
-driver.register_adapter(OneBotV11Adapter)
-
-nonebot.load_plugin("src.plugins.chat")  
-nonebot.load_plugin("src.plugins.autonomy")
-nonebot.load_plugin("src.plugins.dashboard")
-nonebot.load_plugin("src.plugins.scheduler")
-nonebot.load_plugin("src.plugins.weather")
-nonebot.load_plugin("src.plugins.what_to_eat")
-nonebot.load_plugin("src.plugins.precipitate_knowledge")
+driver = bootstrap_application()
 
 if __name__ == "__main__":
-    nonebot.run()
+    main()

@@ -50,10 +50,12 @@ class AffinityState(BaseModel):
 
 class ReminderRecord(BaseModel):
     reminder_id: str
+    session_id: str
     user_id: int
     group_id: int
     content: str
     remind_time: datetime
+    created_at: datetime = Field(default_factory=datetime.now)
 
 
 RelationshipType = Literal["event", "preference", "taboo", "promise"]

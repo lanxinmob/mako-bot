@@ -15,7 +15,9 @@ from typing import Dict, List, Optional
 
 from nonebot.log import logger
 
+from src.models.schemas import ReminderRecord
 from src.services.llm import get_deepseek_client, has_deepseek
+from src.services.storage import StorageService
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,30 @@ class Reminder:
     job_id: str
     content: str
     remind_time: datetime
+    session_id: str = ""
+    user_id: int = 0
+    group_id: int = 0
+
+    def to_record(self, session_id: Optional[str] = None) -> ReminderRecord:
+        return ReminderRecord(
+            reminder_id=self.job_id,
+            session_id=session_id or self.session_id,
+            user_id=self.user_id,
+            group_id=self.group_id,
+            content=self.content,
+            remind_time=self.remind_time,
+        )
+
+    @classmethod
+    def from_record(cls, record: ReminderRecord) -> "Reminder":
+        return cls(
+            job_id=record.reminder_id,
+            content=record.content,
+            remind_time=record.remind_time,
+            session_id=record.session_id,
+            user_id=record.user_id,
+            group_id=record.group_id,
+        )
 
 
 def generate_job_id(group_id: int, user_id: int, remind_time: datetime) -> str:
@@ -81,24 +107,51 @@ class ReminderIntentParser:
 
 
 class ReminderBook:
-    """Small state owner for reminders scheduled by the current process."""
+    """Reminder repository backed by Redis in production and memory in tests."""
 
-    def __init__(self) -> None:
+    def __init__(self, storage: Optional[StorageService] = None) -> None:
+        self.storage = storage
         self._items: Dict[str, List[Reminder]] = {}
 
-    def list(self, session_id: str) -> List[Reminder]:
-        return list(self._items.get(session_id, ()))
+    def list(self, session_id: str, *, user_id: Optional[int] = None) -> List[Reminder]:
+        if self.storage is not None:
+            return [
+                Reminder.from_record(item)
+                for item in self.storage.list_reminders(session_id, user_id=user_id)
+            ]
+        items = list(self._items.get(session_id, ()))
+        return [item for item in items if user_id is None or item.user_id == user_id]
+
+    def list_all(self) -> List[Reminder]:
+        if self.storage is not None:
+            return [Reminder.from_record(item) for item in self.storage.list_reminders()]
+        return [item for items in self._items.values() for item in items]
 
     def add(self, session_id: str, reminder: Reminder) -> None:
+        if self.storage is not None:
+            self.storage.save_reminder(reminder.to_record(session_id))
+            return
         self._items.setdefault(session_id, []).append(reminder)
 
-    def find(self, session_id: str, keyword: str) -> Optional[Reminder]:
+    def find(
+        self,
+        session_id: str,
+        keyword: str,
+        *,
+        user_id: Optional[int] = None,
+    ) -> Optional[Reminder]:
         return next(
-            (item for item in self._items.get(session_id, ()) if keyword in item.content),
+            (item for item in self.list(session_id, user_id=user_id) if keyword in item.content),
             None,
         )
 
     def remove(self, session_id: str, job_id: str) -> Optional[Reminder]:
+        if self.storage is not None:
+            existing = self.storage.get_reminder(job_id)
+            if existing is None or existing.session_id != session_id:
+                return None
+            self.storage.delete_reminder(job_id)
+            return Reminder.from_record(existing)
         items = self._items.get(session_id, [])
         for index, item in enumerate(items):
             if item.job_id == job_id:
@@ -107,4 +160,3 @@ class ReminderBook:
                     self._items.pop(session_id, None)
                 return removed
         return None
-

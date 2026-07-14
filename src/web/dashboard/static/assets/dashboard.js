@@ -77,12 +77,6 @@
   }
 
   function getInitialToken() {
-    const params = new URLSearchParams(window.location.search);
-    const queryToken = params.get('token') || params.get('auth_token');
-    if (queryToken) {
-      localStorage.setItem(TOKEN_KEY, queryToken);
-      return queryToken;
-    }
     return localStorage.getItem(TOKEN_KEY) || '';
   }
 
@@ -522,7 +516,7 @@
 
   async function loadSummary() {
     if (!state.token) {
-      state.error = '把 token 放进 URL query，或在本机 localStorage 写入 mako.dashboard.token。';
+      state.error = '请输入 Dashboard token；它只会保存在当前浏览器的 localStorage 中。';
       state.summary = fallbackSummary;
       render();
       return;

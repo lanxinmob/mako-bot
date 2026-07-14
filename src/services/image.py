@@ -13,6 +13,7 @@ from src.core.config import get_settings
 from src.core.errors import ImageTooLargeError, NotConfiguredError
 from src.services.gemini import describe_image_with_gemini, has_gemini
 from src.services.llm import get_openai_client, get_qwen_client, has_openai, has_qwen
+from src.services.search import validate_public_url
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -44,9 +45,12 @@ async def download_image_data(url: str, max_size: Optional[int] = None) -> tuple
     max_bytes = max_size if max_size is not None else settings.image_max_download_bytes
     timeout = settings.image_download_timeout
     headers = {"User-Agent": USER_AGENT}
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+    safe_url = await validate_public_url(url)
+    # Redirects are deliberately disabled: every redirect target would need a
+    # fresh DNS/IP validation to preserve the SSRF boundary.
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         # HEAD-first: check Content-Length before downloading the body
-        head_resp = await client.head(url, headers=headers)
+        head_resp = await client.head(safe_url, headers=headers)
         content_length = head_resp.headers.get("content-length")
         if content_length:
             cl = int(content_length)
@@ -54,19 +58,20 @@ async def download_image_data(url: str, max_size: Optional[int] = None) -> tuple
                 raise ImageTooLargeError(
                     f"Image too large: Content-Length={cl} bytes exceeds limit of {max_bytes} bytes"
                 )
-        resp = await client.get(url, headers=headers)
+        resp = await client.get(safe_url, headers=headers)
         resp.raise_for_status()
         # Stream-read with manual truncation to avoid buffering over-limit data
-        content = b""
+        content = bytearray()
         async for chunk in resp.aiter_bytes(chunk_size=65536):
-            content += chunk
+            content.extend(chunk)
             if len(content) > max_bytes:
                 raise ImageTooLargeError(
                     f"Image too large: downloaded {len(content)} bytes exceeds limit of {max_bytes} bytes"
                 )
         header_mime = resp.headers.get("content-type", "").split(";")[0].strip()
-        mime = header_mime if header_mime.startswith("image/") else _detect_mime(content)
-        return content, mime
+        result = bytes(content)
+        mime = header_mime if header_mime.startswith("image/") else _detect_mime(result)
+        return result, mime
 
 
 async def download_image_bytes(url: str, max_size: Optional[int] = None) -> bytes:

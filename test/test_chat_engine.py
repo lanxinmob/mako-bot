@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.services.chat_engine import ChatEngine, ChatReply, ChatRequest
+from src.services.chat_policy import ReplyPlan
 
 
 class FakeStorage:
@@ -108,6 +109,29 @@ async def test_generate_returns_uncommitted_reply() -> None:
     assert reply.history[-1] == {"role": "assistant", "content": "回复"}
     assert storage.saved is None
     assert storage.records == []
+
+
+@pytest.mark.asyncio
+async def test_generate_uses_reply_plan_token_and_character_limits() -> None:
+    storage = FakeStorage()
+    engine = ChatEngine(storage=storage)
+    plan = ReplyPlan(
+        mode="micro",
+        max_chars=10,
+        max_tokens=77,
+        latency_min=0.0,
+        latency_max=0.0,
+    )
+    engine._call_llm = AsyncMock(return_value=("第一句。第二句非常非常长。", "fake-model"))
+
+    reply = await engine.generate(make_request(reply_plan=plan, social_state="rapid_exchange"))
+
+    assert len(reply.text) <= 10
+    assert reply.text.endswith("…")
+    assert engine._call_llm.await_args.kwargs["max_tokens"] == 77
+    built_messages = engine._call_llm.await_args.args[0]
+    assert "回复硬上限：10 字" in built_messages[0]["content"]
+    assert "当前社交状态：rapid_exchange" in built_messages[0]["content"]
 
 
 def test_commit_persists_only_after_delivery_boundary() -> None:

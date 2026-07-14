@@ -16,3 +16,7 @@ class ExternalServiceError(AppError):
 
 class ImageTooLargeError(AppError):
     """Raised when an image exceeds configured size or dimension limits."""
+
+
+class UnsafeUrlError(AppError):
+    """Raised when a server-side fetch targets a non-public or invalid URL."""
