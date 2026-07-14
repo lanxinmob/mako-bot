@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from nonebot import get_bot
+from nonebot import get_bot, get_driver
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageEvent, MessageSegment
 from nonebot.log import logger
 from nonebot.matcher import Matcher
@@ -18,10 +18,11 @@ from src.services.reminder import (
     ReminderIntentParser,
     generate_job_id,
 )
+from src.services.storage import StorageService
 
 
 reminder_parser = ReminderIntentParser()
-reminder_book = ReminderBook()
+reminder_book = ReminderBook(storage=StorageService())
 
 
 async def send_group_reminder(
@@ -73,9 +74,49 @@ def _schedule_reminder(
         misfire_grace_time=60,
         replace_existing=replace_existing,
     )
-    reminder = Reminder(job_id=job_id, content=content, remind_time=remind_time)
+    reminder = Reminder(
+        job_id=job_id,
+        content=content,
+        remind_time=remind_time,
+        session_id=session_id,
+        user_id=event.user_id,
+        group_id=event.group_id,
+    )
     reminder_book.add(session_id, reminder)
     return reminder
+
+
+@get_driver().on_startup
+async def restore_persisted_reminders() -> None:
+    """Re-register future reminders after a process restart."""
+
+    now = datetime.now()
+    restored = 0
+    expired = 0
+    for reminder in reminder_book.list_all():
+        if reminder.remind_time <= now:
+            reminder_book.remove(reminder.session_id, reminder.job_id)
+            expired += 1
+            continue
+        if scheduler.get_job(reminder.job_id) is not None:
+            continue
+        scheduler.add_job(
+            send_group_reminder,
+            "date",
+            run_date=reminder.remind_time,
+            args=[
+                reminder.group_id,
+                reminder.session_id,
+                reminder.job_id,
+                reminder.content,
+                False,
+            ],
+            id=reminder.job_id,
+            misfire_grace_time=300,
+            replace_existing=True,
+        )
+        restored += 1
+    logger.info("提醒恢复完成 restored={} expired_removed={}", restored, expired)
 
 
 async def handle_reminder(
@@ -98,6 +139,9 @@ async def handle_reminder(
         if not content or remind_time is None:
             await matcher.send("茉子没听清时间和内容呢，请说得再清楚一点嘛~")
             return True
+        if remind_time <= datetime.now():
+            await matcher.send("提醒时间已经过去了，请告诉茉子一个未来的时间哦~")
+            return True
         reminder = _schedule_reminder(
             event=event,
             session_id=address.session_id,
@@ -111,7 +155,11 @@ async def handle_reminder(
         return True
 
     keyword = str(intent_data.get("target_content") or "").strip()
-    current = reminder_book.find(address.session_id, keyword) if keyword else None
+    current = (
+        reminder_book.find(address.session_id, keyword, user_id=event.user_id)
+        if keyword
+        else None
+    )
     if current is None:
         await matcher.send("茉子没找到你说的那个提醒哦，要不先看看提醒列表？")
         return True
@@ -138,7 +186,7 @@ async def handle_reminder(
             )
             if updated.job_id != current.job_id:
                 scheduler.remove_job(current.job_id)
-            reminder_book.remove(address.session_id, current.job_id)
+                reminder_book.remove(address.session_id, current.job_id)
         except Exception as exc:
             logger.exception(f"更新提醒失败: {exc}")
             await matcher.send("更新提醒时出了点问题，旧提醒可能仍然有效，请查看提醒列表确认。")
@@ -153,8 +201,8 @@ async def handle_reminder(
     return False
 
 
-def format_reminders(session_id: str) -> str:
-    reminders = reminder_book.list(session_id)
+def format_reminders(session_id: str, *, user_id: Optional[int] = None) -> str:
+    reminders = reminder_book.list(session_id, user_id=user_id)
     if not reminders:
         return "你当前没有设置任何提醒哦~"
     lines = ["这是你设置的提醒列表："]
@@ -163,4 +211,3 @@ def format_reminders(session_id: str) -> str:
         for index, item in enumerate(reminders, start=1)
     )
     return "\n".join(lines)
-

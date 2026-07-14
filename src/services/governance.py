@@ -15,9 +15,9 @@ class AccessDecision:
 
 
 class GovernanceService:
-    def __init__(self) -> None:
+    def __init__(self, storage: Optional[StorageService] = None) -> None:
         self.settings = get_settings()
-        self.storage = StorageService()
+        self.storage = storage or StorageService()
         self._admin_ids = set(self.settings.parse_int_list(self.settings.admin_user_ids))
         self._config_blacklist_users = set(self.settings.parse_int_list(self.settings.blacklist_user_ids))
         self._config_blacklist_groups = set(self.settings.parse_int_list(self.settings.blacklist_group_ids))
@@ -32,6 +32,8 @@ class GovernanceService:
         return user_id in self._admin_ids or is_group_admin
 
     def can_chat(self, user_id: int, group_id: Optional[int] = None) -> AccessDecision:
+        if self.settings.redis_required and self.storage.redis is None:
+            return AccessDecision(False, "durable storage is unavailable")
         if user_id in self._config_blacklist_users or self.storage.is_user_blacklisted(user_id):
             return AccessDecision(False, "user is blacklisted")
         if group_id and (group_id in self._config_blacklist_groups or self.storage.is_group_blacklisted(group_id)):

@@ -25,9 +25,21 @@ def get_embedding_model() -> SentenceTransformer:
 class VectorStore:
     def __init__(self) -> None:
         self.settings = get_settings()
-        self.redis = get_redis()
+        self._redis = get_redis()
+        self._redis_override = False
         self.index_name = self.settings.vector_index_name
         self.prefix = self.settings.vector_prefix
+
+    @property
+    def redis(self):
+        if not self._redis_override:
+            self._redis = get_redis()
+        return self._redis
+
+    @redis.setter
+    def redis(self, value) -> None:
+        self._redis = value
+        self._redis_override = True
 
     @property
     def dimension(self) -> int:

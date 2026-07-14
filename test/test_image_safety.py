@@ -180,6 +180,11 @@ class TestProcessImageSync:
 class TestDownloadImageData:
     """Mock httpx to exercise the download size-guard logic."""
 
+    @pytest.fixture(autouse=True)
+    def _allow_mock_public_url(self, monkeypatch):
+        validator = AsyncMock(side_effect=lambda url: url)
+        monkeypatch.setattr("src.services.image.validate_public_url", validator)
+
     @pytest.mark.asyncio
     async def test_normal_download_returns_bytes_and_mime(self):
         fake_body = _make_jpeg_bytes(10, 10)
@@ -336,6 +341,14 @@ class TestDownloadImageData:
 
             with pytest.raises(ImageTooLargeError, match="Content-Length"):
                 await download_image_data("http://example.com/img.jpg", max_size=1)
+
+
+@pytest.mark.asyncio
+async def test_image_download_rejects_private_network_targets() -> None:
+    with patch("src.services.image.httpx.AsyncClient") as client:
+        with pytest.raises(AppError, match="非公网"):
+            await download_image_data("http://127.0.0.1/internal.png")
+        client.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

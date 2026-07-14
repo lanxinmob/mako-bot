@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import html
+import ipaddress
 import re
 from dataclasses import dataclass
 from typing import List, Optional
@@ -9,7 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 from nonebot.log import logger
 
 from src.core.config import get_settings
-from src.core.errors import NotConfiguredError
+from src.core.errors import NotConfiguredError, UnsafeUrlError
 from src.services.http import fetch_json, fetch_text
 
 
@@ -36,6 +38,50 @@ def _url_key(url: str) -> str:
         return url.strip()
     path = parsed.path.rstrip("/") or "/"
     return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, ""))
+
+
+def _address_is_public(value: str) -> bool:
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return bool(address.is_global)
+
+
+async def validate_public_url(url: str) -> str:
+    """Reject local, private, credential-bearing and non-HTTP fetch targets."""
+
+    try:
+        parsed = urlsplit((url or "").strip())
+    except ValueError as exc:
+        raise UnsafeUrlError("URL 格式无效") from exc
+    if parsed.scheme.lower() not in {"http", "https"}:
+        raise UnsafeUrlError("只允许 http/https URL")
+    if not parsed.hostname or parsed.username or parsed.password:
+        raise UnsafeUrlError("URL 缺少主机名或包含凭据")
+    hostname = parsed.hostname.rstrip(".").lower()
+    if hostname == "localhost" or hostname.endswith(".localhost"):
+        raise UnsafeUrlError("不允许访问本机地址")
+    try:
+        literal = ipaddress.ip_address(hostname)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        if not literal.is_global:
+            raise UnsafeUrlError("不允许访问非公网 IP")
+    else:
+        try:
+            infos = await asyncio.get_running_loop().getaddrinfo(
+                hostname,
+                parsed.port or (443 if parsed.scheme.lower() == "https" else 80),
+                type=0,
+            )
+        except OSError as exc:
+            raise UnsafeUrlError("域名解析失败") from exc
+        addresses = {item[4][0].split("%", 1)[0] for item in infos if item[4]}
+        if not addresses or any(not _address_is_public(item) for item in addresses):
+            raise UnsafeUrlError("域名解析到了非公网地址")
+    return parsed.geturl()
 
 
 def _dedupe_and_limit(results: List[SearchResult], limit: int) -> List[SearchResult]:
@@ -137,7 +183,8 @@ def extract_text_from_html(content: str) -> str:
 
 async def fetch_page_text(url: str, max_chars: int = 6000) -> str:
     try:
-        html_text = await fetch_text(url)
+        safe_url = await validate_public_url(url)
+        html_text = await fetch_text(safe_url)
     except Exception as exc:
         logger.warning(f"Failed to fetch url content: {exc}")
         return ""

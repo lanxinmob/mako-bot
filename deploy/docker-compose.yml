@@ -1,0 +1,41 @@
+services:
+  redis:
+    image: redis/redis-stack-server:7.4.0-v3
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    command: ["redis-stack-server", "--appendonly", "yes"]
+
+  mako-bot:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      HOST: 0.0.0.0
+      PORT: 8080
+      REDIS_REQUIRED: "true"
+      LLM_REQUIRED: "true"
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${BOT_PORT:-8080}:8080"
+    volumes:
+      - bot-logs:/app/logs
+    mem_limit: ${BOT_MEMORY_LIMIT:-4g}
+    cpus: ${BOT_CPU_LIMIT:-2.0}
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  redis-data:
+  bot-logs:

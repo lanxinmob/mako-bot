@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Dict, List, Literal, Optional
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     redis_host: str = Field(default="localhost", validation_alias=AliasChoices("REDIS_HOST"))
     redis_port: int = Field(default=6379, validation_alias=AliasChoices("REDIS_PORT"))
     redis_db: int = Field(default=0, validation_alias=AliasChoices("REDIS_DB"))
+    redis_retry_seconds: float = Field(
+        default=30.0, validation_alias=AliasChoices("REDIS_RETRY_SECONDS")
+    )
+    redis_health_check_seconds: float = Field(
+        default=5.0, validation_alias=AliasChoices("REDIS_HEALTH_CHECK_SECONDS")
+    )
+    global_memory_max_records: int = Field(
+        default=50_000, validation_alias=AliasChoices("GLOBAL_MEMORY_MAX_RECORDS")
+    )
+    redis_required: bool = Field(default=True, validation_alias=AliasChoices("REDIS_REQUIRED"))
+    llm_required: bool = Field(default=True, validation_alias=AliasChoices("LLM_REQUIRED"))
 
     # LLM / AI
     deepseek_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("DEEPSEEK_API_KEY"))
@@ -147,6 +158,10 @@ class Settings(BaseSettings):
     # Chat
     max_history_turns: int = Field(default=50, validation_alias=AliasChoices("MAX_HISTORY_TURNS"))
     reply_random_chance: float = Field(default=0.001, validation_alias=AliasChoices("REPLY_RANDOM_CHANCE"))
+    record_undirected_group_messages: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("RECORD_UNDIRECTED_GROUP_MESSAGES"),
+    )
     tool_timeout_seconds: float = Field(
         default=25.0,
         validation_alias=AliasChoices("TOOL_TIMEOUT_SECONDS"),
@@ -177,7 +192,52 @@ class Settings(BaseSettings):
     blacklist_user_ids: Optional[str] = Field(default=None, validation_alias=AliasChoices("BLACKLIST_USER_IDS"))
     blacklist_group_ids: Optional[str] = Field(default=None, validation_alias=AliasChoices("BLACKLIST_GROUP_IDS"))
     group_reply_max_chars_undirected: int = Field(
-        default=60, validation_alias=AliasChoices("GROUP_REPLY_MAX_CHARS_UNDIRECTED")
+        default=400, validation_alias=AliasChoices("GROUP_REPLY_MAX_CHARS_UNDIRECTED")
+    )
+    known_bot_user_ids: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("KNOWN_BOT_USER_IDS")
+    )
+    chat_rhythm_enabled: bool = Field(
+        default=True, validation_alias=AliasChoices("CHAT_RHYTHM_ENABLED")
+    )
+    chat_rhythm_fast_turn_seconds: float = Field(
+        default=6.0, validation_alias=AliasChoices("CHAT_RHYTHM_FAST_TURN_SECONDS")
+    )
+    chat_rhythm_window_seconds: int = Field(
+        default=30, validation_alias=AliasChoices("CHAT_RHYTHM_WINDOW_SECONDS")
+    )
+    chat_rhythm_cooldown_seconds: int = Field(
+        default=90, validation_alias=AliasChoices("CHAT_RHYTHM_COOLDOWN_SECONDS")
+    )
+    chat_rhythm_max_cooldown_seconds: int = Field(
+        default=900, validation_alias=AliasChoices("CHAT_RHYTHM_MAX_COOLDOWN_SECONDS")
+    )
+    chat_reply_debounce_seconds: float = Field(
+        default=1.2, validation_alias=AliasChoices("CHAT_REPLY_DEBOUNCE_SECONDS")
+    )
+    chat_reply_max_chars_micro: int = Field(
+        default=168, validation_alias=AliasChoices("CHAT_REPLY_MAX_CHARS_MICRO")
+    )
+    chat_reply_max_chars_short: int = Field(
+        default=400, validation_alias=AliasChoices("CHAT_REPLY_MAX_CHARS_SHORT")
+    )
+    chat_reply_max_chars_normal: int = Field(
+        default=1120, validation_alias=AliasChoices("CHAT_REPLY_MAX_CHARS_NORMAL")
+    )
+    chat_reply_max_chars_deep: int = Field(
+        default=2560, validation_alias=AliasChoices("CHAT_REPLY_MAX_CHARS_DEEP")
+    )
+    chat_reply_max_tokens_micro: int = Field(
+        default=384, validation_alias=AliasChoices("CHAT_REPLY_MAX_TOKENS_MICRO")
+    )
+    chat_reply_max_tokens_short: int = Field(
+        default=720, validation_alias=AliasChoices("CHAT_REPLY_MAX_TOKENS_SHORT")
+    )
+    chat_reply_max_tokens_normal: int = Field(
+        default=1920, validation_alias=AliasChoices("CHAT_REPLY_MAX_TOKENS_NORMAL")
+    )
+    chat_reply_max_tokens_deep: int = Field(
+        default=4096, validation_alias=AliasChoices("CHAT_REPLY_MAX_TOKENS_DEEP")
     )
 
     # Cost control
@@ -193,14 +253,14 @@ class Settings(BaseSettings):
     tool_cost_overrides: Optional[str] = Field(default=None, validation_alias=AliasChoices("TOOL_COST_OVERRIDES"))
 
     # Proactive follow-up
-    proactive_enabled: bool = Field(default=True, validation_alias=AliasChoices("PROACTIVE_ENABLED"))
+    proactive_enabled: bool = Field(default=False, validation_alias=AliasChoices("PROACTIVE_ENABLED"))
     proactive_scan_minutes: int = Field(default=20, validation_alias=AliasChoices("PROACTIVE_SCAN_MINUTES"))
     proactive_default_hours: int = Field(default=24, validation_alias=AliasChoices("PROACTIVE_DEFAULT_HOURS"))
 
     # Autonomy
-    autonomy_enabled: bool = Field(default=True, validation_alias=AliasChoices("AUTONOMY_ENABLED"))
-    autonomy_owner_id: int = Field(default=1724461496, validation_alias=AliasChoices("AUTONOMY_OWNER_ID"))
-    autonomy_group_ids: Optional[str] = Field(default="984928242", validation_alias=AliasChoices("AUTONOMY_GROUP_IDS"))
+    autonomy_enabled: bool = Field(default=False, validation_alias=AliasChoices("AUTONOMY_ENABLED"))
+    autonomy_owner_id: Optional[int] = Field(default=None, validation_alias=AliasChoices("AUTONOMY_OWNER_ID"))
+    autonomy_group_ids: Optional[str] = Field(default=None, validation_alias=AliasChoices("AUTONOMY_GROUP_IDS"))
     autonomy_private_user_ids: Optional[str] = Field(default=None, validation_alias=AliasChoices("AUTONOMY_PRIVATE_USER_IDS"))
     autonomy_scan_minutes: int = Field(default=10, validation_alias=AliasChoices("AUTONOMY_SCAN_MINUTES"))
     autonomy_cooldown_seconds: int = Field(default=600, validation_alias=AliasChoices("AUTONOMY_COOLDOWN_SECONDS"))
@@ -224,6 +284,49 @@ class Settings(BaseSettings):
 
     def build_redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+    @model_validator(mode="after")
+    def validate_runtime_safety(self) -> "Settings":
+        if not 0.0 <= self.reply_random_chance <= 1.0:
+            raise ValueError("REPLY_RANDOM_CHANCE must be between 0 and 1")
+        if self.max_history_turns < 1:
+            raise ValueError("MAX_HISTORY_TURNS must be positive")
+        if self.chat_rhythm_fast_turn_seconds <= 0 or self.chat_rhythm_window_seconds < 1:
+            raise ValueError("Chat rhythm intervals must be positive")
+        if self.chat_rhythm_cooldown_seconds < 1 or self.chat_rhythm_max_cooldown_seconds < 1:
+            raise ValueError("Chat rhythm cooldowns must be positive")
+        if self.chat_rhythm_cooldown_seconds > self.chat_rhythm_max_cooldown_seconds:
+            raise ValueError("CHAT_RHYTHM_COOLDOWN_SECONDS cannot exceed max cooldown")
+        if self.chat_reply_debounce_seconds < 0:
+            raise ValueError("CHAT_REPLY_DEBOUNCE_SECONDS cannot be negative")
+        for value in (
+            self.chat_reply_max_chars_micro,
+            self.chat_reply_max_chars_short,
+            self.chat_reply_max_chars_normal,
+            self.chat_reply_max_chars_deep,
+            self.chat_reply_max_tokens_micro,
+            self.chat_reply_max_tokens_short,
+            self.chat_reply_max_tokens_normal,
+            self.chat_reply_max_tokens_deep,
+        ):
+            if value < 1:
+                raise ValueError("Chat reply limits must be positive")
+        if self.global_memory_max_records < 1000:
+            raise ValueError("GLOBAL_MEMORY_MAX_RECORDS must be at least 1000")
+        if self.redis_retry_seconds < 1 or self.redis_health_check_seconds < 1:
+            raise ValueError("Redis retry and health-check intervals must be at least one second")
+        if self.dashboard_token and len(self.dashboard_token) < 32:
+            raise ValueError("DASHBOARD_TOKEN must contain at least 32 characters")
+        if self.autonomy_enabled and self.autonomy_owner_id is None:
+            raise ValueError("AUTONOMY_OWNER_ID is required when AUTONOMY_ENABLED=true")
+        if self.autonomy_enabled and not (
+            self.parse_int_list(self.autonomy_group_ids)
+            or self.parse_int_list(self.autonomy_private_user_ids)
+        ):
+            raise ValueError(
+                "At least one AUTONOMY_GROUP_IDS or AUTONOMY_PRIVATE_USER_IDS target is required"
+            )
+        return self
 
     @staticmethod
     def parse_name_list(raw: Optional[str]) -> List[str]:

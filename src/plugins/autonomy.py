@@ -94,11 +94,16 @@ def private_user_ids() -> List[int]:
 
 
 def is_owner(event: MessageEvent) -> bool:
-    return event.user_id == settings.autonomy_owner_id
+    return settings.autonomy_owner_id is not None and event.user_id == settings.autonomy_owner_id
 
 
 def is_enabled() -> bool:
-    return bool(settings.autonomy_enabled)
+    if not settings.autonomy_enabled:
+        return False
+    if settings.autonomy_owner_id is None:
+        logger.error("AUTONOMY_ENABLED=true but AUTONOMY_OWNER_ID is not configured; autonomy is disabled.")
+        return False
+    return True
 
 
 def ttl_expired(created_at: float) -> bool:

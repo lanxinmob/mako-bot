@@ -15,6 +15,7 @@ from src.models.schemas import (
     ChatRecord,
     NoteRecord,
     OutboundMessageRecord,
+    ReminderRecord,
     RelationshipMemory,
     ThoughtTrace,
 )
@@ -40,6 +41,7 @@ class MemoryStorage:
     blacklisted_users: Dict[int, str] = field(default_factory=dict)
     blacklisted_groups: Dict[int, str] = field(default_factory=dict)
     daily_costs: Dict[str, float] = field(default_factory=dict)
+    reminders: Dict[str, dict] = field(default_factory=dict)
 
 
 _memory = MemoryStorage()
@@ -47,8 +49,21 @@ _memory = MemoryStorage()
 
 class StorageService:
     def __init__(self) -> None:
-        self.redis = get_redis()
+        self._redis = get_redis()
+        self._redis_override = False
         self.settings = get_settings()
+
+    @property
+    def redis(self):
+        if not self._redis_override:
+            self._redis = get_redis()
+        return self._redis
+
+    @redis.setter
+    def redis(self, value) -> None:
+        # Tests and explicitly constructed adapters may force a backend.
+        self._redis = value
+        self._redis_override = True
 
     def get_history(self, session_id: str) -> List[dict]:
         if self.redis:
@@ -85,8 +100,58 @@ class StorageService:
         payload = json.dumps(record.model_dump(mode="json"), ensure_ascii=False)
         if self.redis:
             self.redis.rpush("all_memory", payload)
+            self.redis.ltrim(
+                "all_memory",
+                -max(1000, self.settings.global_memory_max_records),
+                -1,
+            )
             return
         _memory.all_memory.append(payload)
+        del _memory.all_memory[:-max(1000, self.settings.global_memory_max_records)]
+
+    def save_reminder(self, reminder: ReminderRecord) -> ReminderRecord:
+        payload = json.dumps(reminder.model_dump(mode="json"), ensure_ascii=False)
+        if self.redis:
+            self.redis.hset("reminders", reminder.reminder_id, payload)
+            return reminder
+        _memory.reminders[reminder.reminder_id] = reminder.model_dump(mode="json")
+        return reminder
+
+    def get_reminder(self, reminder_id: str) -> Optional[ReminderRecord]:
+        if self.redis:
+            raw = self.redis.hget("reminders", reminder_id)
+            return ReminderRecord.model_validate_json(raw) if raw else None
+        payload = _memory.reminders.get(reminder_id)
+        return ReminderRecord.model_validate(payload) if payload else None
+
+    def list_reminders(
+        self,
+        session_id: Optional[str] = None,
+        *,
+        user_id: Optional[int] = None,
+    ) -> List[ReminderRecord]:
+        if self.redis:
+            reminders: List[ReminderRecord] = []
+            for row in self.redis.hvals("reminders"):
+                try:
+                    reminders.append(ReminderRecord.model_validate_json(row))
+                except Exception:
+                    continue
+        else:
+            reminders = [
+                ReminderRecord.model_validate(item) for item in _memory.reminders.values()
+            ]
+        if session_id is not None:
+            reminders = [item for item in reminders if item.session_id == session_id]
+        if user_id is not None:
+            reminders = [item for item in reminders if item.user_id == user_id]
+        reminders.sort(key=lambda item: item.remind_time)
+        return reminders
+
+    def delete_reminder(self, reminder_id: str) -> bool:
+        if self.redis:
+            return bool(self.redis.hdel("reminders", reminder_id))
+        return _memory.reminders.pop(reminder_id, None) is not None
 
     def list_global_records(self, limit: int = 100) -> List[ChatRecord]:
         rows: List[str]

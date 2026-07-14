@@ -64,10 +64,10 @@ check_http() {
 
     local http_code
     http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 \
-        "http://${HTTP_HOST}:${HTTP_PORT}/" 2>/dev/null || echo "000")
+        "http://${HTTP_HOST}:${HTTP_PORT}/readyz" 2>/dev/null || echo "000")
 
-    if [[ "${http_code}" == "000" ]]; then
-        log ERROR "HTTP 端点不可达: ${HTTP_HOST}:${HTTP_PORT}"
+    if [[ "${http_code}" != "200" ]]; then
+        log ERROR "就绪探针失败: ${HTTP_HOST}:${HTTP_PORT}/readyz HTTP=${http_code}"
         return 1
     fi
 

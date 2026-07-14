@@ -1,221 +1,167 @@
-from nonebot import get_bot
+"""Scheduled greetings and news delivery."""
+
+from __future__ import annotations
+
+import asyncio
 import random
-import requests
-from nonebot_plugin_apscheduler import scheduler
+from datetime import datetime
+
+from nonebot import get_bot, on_command
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
+from nonebot.log import logger
+from nonebot.matcher import Matcher
+from nonebot_plugin_apscheduler import scheduler
+
 from src.core.config import get_settings
 from src.models.schemas import ChatRecord
+from src.services.news import fetch_juejin, fetch_tianxin
 from src.services.outbound_dedup import OutboundDedupService
 from src.services.storage import StorageService
-from datetime import datetime
 
 
 _storage = StorageService()
 _outbound_dedup = OutboundDedupService(_storage)
+daily_news_matcher = on_command(
+    "精选文章", aliases={"news", "今日新闻", "日报"}, priority=5, block=True
+)
+bilibili_matcher = on_command("bilibili", priority=5, block=True)
 
 
-def _plain_text(message) -> str:
-    if isinstance(message, Message):
-        return message.extract_plain_text()
-    return str(message)
+def _plain_text(message: object) -> str:
+    return message.extract_plain_text() if isinstance(message, Message) else str(message)
 
 
-async def _send_scheduled_group_message(bot, group_id, message, *, intent: str, source: str) -> bool:
+async def _send_scheduled_group_message(
+    bot,
+    group_id: int | None,
+    message: Message | str,
+    *,
+    intent: str,
+    source: str,
+) -> bool:
     if not group_id:
+        logger.warning("定时消息未发送：DEFAULT_GROUP_ID 未配置 source={}", source)
         return False
     content = _plain_text(message)
-    decision = _outbound_dedup.check(
+    decision = await asyncio.to_thread(
+        _outbound_dedup.check,
         target_type="group",
         target_id=group_id,
         intent=intent,
         content=content,
     )
     if not decision.allowed:
-        print(
-            f"跳过相似定时消息 group={group_id} intent={intent} "
-            f"similarity={decision.similarity:.3f}"
+        logger.info(
+            "跳过相似定时消息 group={} intent={} similarity={:.3f}",
+            group_id,
+            intent,
+            decision.similarity,
         )
         return False
     await bot.send_group_msg(group_id=group_id, message=message)
-    _outbound_dedup.record(
+    await asyncio.to_thread(
+        _outbound_dedup.record,
         target_type="group",
         target_id=group_id,
         intent=intent,
         content=content,
         source=source,
     )
-    _storage.append_global_record(
-        ChatRecord(role="assistant", content=content, group_id=group_id, time=datetime.now())
+    await asyncio.to_thread(
+        _storage.append_global_record,
+        ChatRecord(role="assistant", content=content, group_id=group_id, time=datetime.now()),
     )
     return True
 
-@scheduler.scheduled_job("cron", hour=7, minute=0)
-async def good_morning_mako():
-    try:
 
-        bot = get_bot()
-        group_id = get_settings().default_group_id
-        message  = [
-        "早上好哦，各位~！今天也是元气满满的一天，有没有想念茉子大人呀？(｡>∀<｡)",
-        "早上好！今天也是元气满满的一天哦~(｡>∀<｡)",
-        "起床啦！别赖床，茉子等你来捣乱~(｀∀´)σ不然茉子要捉弄你了~(￣▽￣)σ",
-        "太阳都晒屁股了，快起床和茉子一起学习~(｡>∀<｡)",
-        ]
-        selected = random.choice(message)
-        sent = await _send_scheduled_group_message(
-            bot,
-            group_id,
-            selected,
+async def _fetch_digest_sections() -> list[tuple[str, list[dict]]]:
+    calls = [
+        fetch_juejin(limit=2),
+        fetch_tianxin(api_name="game", limit=2),
+        fetch_tianxin(api_name="dongman", limit=2),
+        fetch_tianxin(api_name="social", limit=2),
+    ]
+    results = await asyncio.gather(*calls, return_exceptions=True)
+    titles = [
+        "🚀 科技前沿",
+        "🎮 游戏情报",
+        "🌸 动漫资讯",
+        "📰 社会新闻",
+    ]
+    sections: list[tuple[str, list[dict]]] = []
+    for title, result in zip(titles, results):
+        if isinstance(result, Exception):
+            logger.warning("资讯抓取失败 section={} error={}", title, result)
+            sections.append((title, []))
+        else:
+            sections.append((title, result))
+    return sections
+
+
+def _render_digest(sections: list[tuple[str, list[dict]]]) -> Message:
+    message = Message("今日资讯快递到啦！\n")
+    for title, news in sections:
+        message.append(MessageSegment.text(f"\n{title}\n"))
+        if not news:
+            message.append(MessageSegment.text("暂无可用内容。\n"))
+            continue
+        for index, item in enumerate(news, start=1):
+            message.append(
+                MessageSegment.text(
+                    f"{index}. {item.get('title', 'N/A')}\n"
+                    f"   {item.get('description', '...')}\n"
+                    f"   {item.get('url', '#')}\n"
+                )
+            )
+    message.append(MessageSegment.text("\n今天的分享就到这里啦。"))
+    return message
+
+
+@scheduler.scheduled_job("cron", hour=7, minute=0, id="mako_good_morning")
+async def good_morning_mako() -> None:
+    choices = [
+        "早上好哦，各位！今天也是元气满满的一天~",
+        "早上好！新的一天也要好好照顾自己哦。",
+        "起床啦，别赖床，茉子等你来捣乱~",
+        "太阳都晒屁股了，快起来开始今天的计划吧。",
+    ]
+    try:
+        await _send_scheduled_group_message(
+            get_bot(),
+            get_settings().default_group_id,
+            random.choice(choices),
             intent="greeting",
             source="scheduler.good_morning",
         )
-        
-        print(f"已成功发送早安问候到群 {group_id}" if sent else f"早安问候未发送到群 {group_id}")
-        
-    except Exception as e:
-        print(f"发送早安问候失败: {e}")
+    except Exception:
+        logger.exception("早安消息发送失败")
 
-def fetch_juejin(limit=2):
+
+@scheduler.scheduled_job("cron", hour=7, minute=10, id="mako_daily_digest")
+async def send_daily_digest() -> None:
     try:
-        url = "https://api.juejin.cn/recommend_api/v1/article/recommend_all_feed"
-        payload = {"client_type": 2608, "cursor": "0", "id_type": 2, "limit": 20, "sort_type": 200}
-        rep = requests.post(url,json=payload,headers={"User-Agent":"Mozilla/5.0"})
-        rep.raise_for_status()
-        rep = rep.json()
-        data = rep.get("data",[])
-        
-        articles = []
-        for item in data:
-            if item.get("item_type") == 2:#内容是文章不是广告
-                info = item.get("item_info", {})
-                art_info = info.get("article_info", {})
-                articles.append({
-                    "title": art_info.get('title', 'N/A'),
-                    "description": art_info.get('brief_content', '...'),
-                    "url": f"https://juejin.cn/post/{art_info.get('article_id', '')}"
-                })
-                if len(articles) >= limit: break
-        return articles
-
-    except Exception as e:
-        print(f"获取掘金文章失败：{e}")
-        return []
-
-
-def fetch_tianxin(api_name,limit=2):
-    try:
-        url = f"https://api.tianapi.com/{api_name}/index"
-        payload={"key":get_settings().tianxin_key,"num":limit}
-        rep = requests.post(url,data=payload)
-        rep.raise_for_status()
-        
-        data = rep.json()
-        data = data.get("newslist",[])
-        item = random.choice(data)
-        articles = []
-
-        articles.append({
-            "title":item.get("title","N/A"),
-            "description":item.get("description","N/A"),
-            "url":item.get("url","#")
-        })
-        return articles
-
-    except Exception as e:
-        print(f"获取天行数据失败 接口：{api_name} {e}")
-        return []
-   
-
-@scheduler.scheduled_job("cron", hour=7, minute=10)
-async def send_daily_digest():
-    try:
-        bot = get_bot()
-        group_id = get_settings().default_group_id
-
-        tech_news = fetch_juejin(limit=2)
-        game_news = fetch_tianxin(api_name='game',limit=10)
-        anime_news = fetch_tianxin(api_name='dongman',limit=10)
-        social_news = fetch_tianxin(api_name='social',limit=10)
-
-        message = Message()
-        message.append("---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦！\n")
-
-        def format_section(title: str, news: list) -> MessageSegment:
-                segment = MessageSegment.text(f"\n{title}\n")
-                if not news:
-                    segment += MessageSegment.text("    欸~？这个板块今天居然是空空如也啊…… ( ´･ω･)\n")
-                else:
-                    for item in news:
-                        segment += MessageSegment.text(f"({news.index(item)+1}) 这篇《{item['title']}》看起来很有趣！\n")
-                        segment += MessageSegment.text(f"    茉子点评：{item['description']}\n")
-                        segment += MessageSegment.text(f"{item['url']}\n")
-                return segment
-
-        message.extend(format_section("🚀 首先是技术力超高的科技前沿！", tech_news))
-        message.extend(format_section("🎮 GOGO！游戏玩家的专属情报！", game_news))
-        message.extend(format_section("🌸 二次元浓度补充！今日新番和趣闻~", anime_news))
-        message.extend(format_section("📰 最后也稍微关心一下现实世界吧！", social_news))
-
-        message.append("\n\n好啦，今天的分享就到这里！茉子下线啦，拜拜~ (｡･ω･｡)ﾉ♡")
-        message.append("---")
-
-        #message = "\n".join(msg)
+        message = _render_digest(await _fetch_digest_sections())
         await _send_scheduled_group_message(
-            bot,
-            group_id,
+            get_bot(),
+            get_settings().default_group_id,
             message,
             intent="daily_digest",
             source="scheduler.daily_digest",
         )
+    except Exception:
+        logger.exception("每日资讯发送失败")
 
-    except Exception as e:
-       print(f"未成功发送精选文章：{e}") 
 
-from nonebot import on_command
-from nonebot.matcher import Matcher 
-
-daily_news_matcher = on_command("精选文章", aliases={"news","今日新闻", "日报"}, priority=5, block=True)
 @daily_news_matcher.handle()
-async def _(matcher:Matcher):
-    await matcher.send("茉子正在努力搜集最新的资讯，请稍等片刻哦...")
+async def handle_daily_news(matcher: Matcher) -> None:
+    await matcher.send("茉子正在搜集最新资讯，请稍等片刻哦……")
     try:
-        tech_news = fetch_juejin(limit=2)
-        game_news = fetch_tianxin(api_name='game',limit=10)
-        anime_news = fetch_tianxin(api_name='dongman',limit=10)
-        social_news = fetch_tianxin(api_name='social',limit=10)
-
-        message = Message()
-        message.append("---\nଘ(੭ˊᵕˋ)੭* ੈ✩‧₊˚\n锵锵锵~！今日份的资讯快递到啦！\n")
-
-        def format_section(title: str, news: list) -> MessageSegment:
-                segment = MessageSegment.text(f"\n{title}\n")
-                if not news:
-                    segment += MessageSegment.text("    欸~？这个板块今天居然是空空如也啊…… ( ´･ω･)\n")
-                else:
-                    for item in news:
-                        segment += MessageSegment.text(f"({news.index(item)+1}) 这篇《{item['title']}》看起来很有趣！\n")
-                        segment += MessageSegment.text(f"    茉子点评：{item['description']}\n")
-                        segment += MessageSegment.text(f"{item['url']}\n")
-                return segment
-
-        message.extend(format_section("🚀 首先是技术力超高的科技前沿！", tech_news))
-        message.extend(format_section("🎮 GOGO！游戏玩家的专属情报！", game_news))
-        message.extend(format_section("🌸 二次元浓度补充！今日新番和趣闻~", anime_news))
-        message.extend(format_section("📰 最后也稍微关心一下现实世界吧！", social_news))
-
-        message.append("\n\n好啦，今天的分享就到这里！茉子下线啦，拜拜~ (｡･ω･｡)ﾉ♡")
-        message.append("---")
-
-        await matcher.send(message)
-
-    except Exception as e:
-       print(f"未成功发送精选文章：{e}") 
+        await matcher.send(_render_digest(await _fetch_digest_sections()))
+    except Exception:
+        logger.exception("手动资讯查询失败")
+        await matcher.send("资讯服务暂时不可用，请稍后再试。")
 
 
-from nonebot import on_command
-from nonebot.matcher import Matcher
-
-@on_command("bilibili").handle()
-async def _(matcher: Matcher):
-    url = "https://www.bilibili.com/"
-    await matcher.send(f"这是b站：\n{url}")
+@bilibili_matcher.handle()
+async def handle_bilibili(matcher: Matcher) -> None:
+    await matcher.send("这是 Bilibili：\nhttps://www.bilibili.com/")
