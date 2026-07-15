@@ -27,6 +27,7 @@ class MemoryStorage:
     histories: Dict[str, List[dict]] = field(default_factory=dict)
     all_memory: List[str] = field(default_factory=list)
     outbound_messages: Dict[str, List[dict]] = field(default_factory=dict)
+    sent_news: Dict[str, float] = field(default_factory=dict)
     profiles: Dict[str, str] = field(default_factory=dict)
     notes: Dict[int, Dict[str, dict]] = field(default_factory=dict)
     bot_profiles: Dict[str, dict] = field(default_factory=dict)
@@ -229,6 +230,21 @@ class StorageService:
                 records.append(record)
         records.sort(key=lambda item: item.created_at, reverse=True)
         return records
+
+    def list_sent_news(self) -> set[str]:
+        if self.redis:
+            return {str(item) for item in self.redis.hkeys("news:sent")}
+        return set(_memory.sent_news)
+
+    def record_sent_news(self, fingerprints: List[str], *, sent_at: Optional[datetime] = None) -> None:
+        values = {item for item in fingerprints if item}
+        if not values:
+            return
+        timestamp = (sent_at or datetime.now()).timestamp()
+        if self.redis:
+            self.redis.hset("news:sent", mapping={item: timestamp for item in values})
+            return
+        _memory.sent_news.update({item: timestamp for item in values})
 
     def get_profile(self, user_id: int) -> Optional[dict]:
         key = f"user_profile:{user_id}"
