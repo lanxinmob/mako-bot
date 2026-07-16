@@ -16,7 +16,7 @@ from typing import Dict, List, Optional
 from nonebot.log import logger
 
 from src.models.schemas import ReminderRecord
-from src.services.llm import get_deepseek_client, has_deepseek
+from src.services.llm import get_deepseek_client, get_deepseek_model, has_deepseek
 from src.services.storage import StorageService
 
 
@@ -92,7 +92,7 @@ class ReminderIntentParser:
         try:
             response = await asyncio.wait_for(
                 get_deepseek_client().chat.completions.create(
-                    model="deepseek-chat",
+                    model=get_deepseek_model(),
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.1,
                     max_tokens=500,

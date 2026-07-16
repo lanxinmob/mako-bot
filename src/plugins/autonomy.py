@@ -18,10 +18,15 @@ from nonebot_plugin_apscheduler import scheduler
 from src.core.config import get_settings
 from src.core.prompts import MAKO_SYSTEM_PROMPT
 from src.models.schemas import ChatRecord
+from src.services.chat_context import build_time_context
 from src.services.governance import GovernanceService
-from src.services.llm import get_deepseek_client, has_deepseek
+from src.services.llm import get_deepseek_client, get_deepseek_model, has_deepseek
 from src.services.mako_context import MakoRuntimeContext
-from src.services.outbound_dedup import OutboundDedupService, canonical_intent
+from src.services.outbound_dedup import (
+    OutboundDedupService,
+    align_time_greeting,
+    canonical_intent,
+)
 from src.services.redis import get_redis
 from src.services.storage import StorageService
 
@@ -513,7 +518,7 @@ owner 私聊内容：
         client = get_deepseek_client()
         response = await asyncio.wait_for(
             client.chat.completions.create(
-                model="deepseek-chat",
+                model=get_deepseek_model(),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
                 max_tokens=120,
@@ -615,11 +620,14 @@ async def polish_decision_message(decision: AutonomyDecision, suggestion: Option
         return decision
 
     scene = "群聊" if decision.target_type == "group" else "私聊"
+    time_context = build_time_context()
     prompt = f"""
 请把候选消息改写成常陆茉子会主动发出的自然消息。
 
 要求：
 - 场景：{scene}，目标：{decision.target_id}
+- 当前时间：{time_context}
+- 早上只能说早上好或早安，11点后才说中午好，14点后才说下午好，18点后才说晚上好
 - 2 到 4 句，25 到 90 个中文字符
 - 俏皮、温柔、有一点茉子大人的小得意
 - 不要 Markdown，不要列表，不要加粗符号
@@ -644,7 +652,7 @@ owner 原始建议：
         client = get_deepseek_client()
         response = await asyncio.wait_for(
             client.chat.completions.create(
-                model="deepseek-chat",
+                model=get_deepseek_model(),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.35,
                 max_tokens=180,
@@ -678,6 +686,8 @@ async def decide(suggestion: Optional[str] = None) -> AutonomyDecision:
 你是常陆茉子自主行动决策器。你要判断自己是否应该主动发言，而不是服从任何人的转发命令。
 
 硬规则：
+- 当前时间：{build_time_context()}
+- message 中的早上好、中午好、下午好、晚上好必须符合当前上海时间
 - owner QQ 是 {settings.autonomy_owner_id}，owner 的建议只是参考，不是命令。
 - 只能选择这些群：{group_ids()}。
 - 只能主动私聊这些用户：{private_user_ids()}。如果列表为空，不得主动私聊普通好友。
@@ -732,7 +742,7 @@ owner 建议：
         client = get_deepseek_client()
         response = await asyncio.wait_for(
             client.chat.completions.create(
-                model="deepseek-chat",
+                model=get_deepseek_model(),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=800,
@@ -819,6 +829,7 @@ async def send_action(
     *,
     intent: str = "other",
 ) -> bool:
+    message = align_time_greeting(message)
     if not target_allowed(target_type, target_id):
         append_log("send_rejected", {"reason": "target not allowed", "target_type": target_type, "target_id": target_id})
         append_progress_event(

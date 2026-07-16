@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from src.models.schemas import OutboundMessageRecord
 from src.services.outbound_dedup import (
     OutboundDedupService,
+    align_time_greeting,
     canonical_intent,
     outbound_similarity,
 )
@@ -90,7 +91,7 @@ def test_different_target_or_intent_is_not_blocked() -> None:
         target_type="group",
         target_id=42,
         intent="topic_share",
-        content="早上好，今天也加油。",
+        content="分享一条刚看到的游戏资讯。",
     ).allowed
 
 
@@ -119,3 +120,42 @@ def test_old_message_outside_window_is_allowed() -> None:
 def test_intent_aliases_are_canonicalized() -> None:
     assert canonical_intent("daily_greeting") == "greeting"
     assert canonical_intent("", "记得按时吃饭") == "reminder"
+
+
+def test_explicit_time_greeting_overrides_model_intent() -> None:
+    assert canonical_intent("topic_share", "大家下午好呀，今天有件新鲜事。") == "greeting"
+
+
+def test_time_greeting_is_aligned_to_shanghai_clock() -> None:
+    morning = datetime(2026, 7, 16, 9, 3)
+    assert align_time_greeting("大家下午好呀，今天热不热？", morning) == (
+        "大家早上好呀，今天热不热？"
+    )
+    assert align_time_greeting("各位早安，今天也加油。", morning) == (
+        "各位早安，今天也加油。"
+    )
+
+
+def test_greeting_cooldown_rejects_different_wording_on_next_day() -> None:
+    now = datetime(2026, 7, 16, 9, 3)
+    storage = FakeLedgerStorage()
+    service = OutboundDedupService(storage)  # type: ignore[arg-type]
+    service.record(
+        target_type="group",
+        target_id=42,
+        intent="greeting",
+        content="早上好，各位！今天也是元气满满的一天。",
+        source="scheduler.good_morning",
+        created_at=now - timedelta(hours=26),
+    )
+
+    decision = service.check(
+        target_type="group",
+        target_id=42,
+        intent="topic_share",
+        content="大家上午好，最近有没有什么有趣的事情？",
+        now=now,
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "greeting already sent within cooldown"

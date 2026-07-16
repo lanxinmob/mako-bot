@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # LLM / AI
     deepseek_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("DEEPSEEK_API_KEY"))
     deepseek_base_url: str = Field(default="https://api.deepseek.com/v1", validation_alias=AliasChoices("DEEPSEEK_BASE_URL"))
+    deepseek_model: str = Field(
+        default="deepseek-v4-flash",
+        validation_alias=AliasChoices("DEEPSEEK_MODEL"),
+    )
     openai_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("OPENAI_API_KEY"))
     openai_base_url: Optional[str] = Field(default=None, validation_alias=AliasChoices("OPENAI_BASE_URL"))
     gemini_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("GEMINI_API_KEY"))
@@ -281,6 +285,10 @@ class Settings(BaseSettings):
         default=200,
         validation_alias=AliasChoices("OUTBOUND_DEDUP_MAX_RECORDS"),
     )
+    outbound_greeting_cooldown_hours: int = Field(
+        default=36,
+        validation_alias=AliasChoices("OUTBOUND_GREETING_COOLDOWN_HOURS"),
+    )
 
     def build_redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
@@ -313,6 +321,8 @@ class Settings(BaseSettings):
                 raise ValueError("Chat reply limits must be positive")
         if self.global_memory_max_records < 1000:
             raise ValueError("GLOBAL_MEMORY_MAX_RECORDS must be at least 1000")
+        if self.outbound_greeting_cooldown_hours < 1:
+            raise ValueError("OUTBOUND_GREETING_COOLDOWN_HOURS must be positive")
         if self.redis_retry_seconds < 1 or self.redis_health_check_seconds < 1:
             raise ValueError("Redis retry and health-check intervals must be at least one second")
         if self.dashboard_token and len(self.dashboard_token) < 32:

@@ -25,7 +25,13 @@ from src.services.image import (
 )
 from src.services.intent import IntentDecision
 from src.services.language import detect_language, speech_to_text, text_to_speech, translate_text
-from src.services.llm import get_deepseek_client, get_openai_client, has_deepseek, has_openai
+from src.services.llm import (
+    get_deepseek_client,
+    get_deepseek_model,
+    get_openai_client,
+    has_deepseek,
+    has_openai,
+)
 from src.services.notes import NoteService
 from src.services.search import fetch_page_text, web_search
 from src.services.weather import get_weather
@@ -402,7 +408,7 @@ class ToolExecutor:
         if has_deepseek():
             client = get_deepseek_client()
             response = await client.chat.completions.create(
-                model="deepseek-chat",
+                model=get_deepseek_model(),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=300,
