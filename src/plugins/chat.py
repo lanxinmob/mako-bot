@@ -372,12 +372,17 @@ async def _handle_chat_locked(
             directed=directed,
             reply_plan=reply_plan,
             social_state=rhythm.social_state if rhythm else reply_plan.social_state,
+            search_outcome=enriched.search_outcome,
         )
 
         input_chars = len(enriched.llm_text) + sum(
             len(str(item.get("content", ""))) for item in history
         )
-        estimated_cost = governance.estimate_llm_cost(input_chars, reply_plan.max_chars)
+        estimated_cost = (
+            0.0
+            if enriched.search_outcome.required and not enriched.search_outcome.success
+            else governance.estimate_llm_cost(input_chars, reply_plan.max_chars)
+        )
         budget = await asyncio.to_thread(
             governance.can_consume_cost,
             event.user_id,
@@ -395,7 +400,11 @@ async def _handle_chat_locked(
 
         # generate
         reply = await chat_engine.generate(request)
-        actual_cost = governance.estimate_llm_cost(input_chars, len(reply.text))
+        actual_cost = (
+            0.0
+            if reply.model == "search-fail-closed"
+            else governance.estimate_llm_cost(input_chars, len(reply.text))
+        )
         audit.thought(
             "chat_reply_generated",
             "模型生成普通聊天回复；仅保存输入输出摘要，不保存隐藏推理链。",
@@ -406,6 +415,16 @@ async def _handle_chat_locked(
                 "input_preview": enriched.llm_text[:160],
                 "image_context_preview": enriched.image_context[:240],
                 "search_context_preview": enriched.search_context[:320],
+                "search_required": enriched.search_outcome.required,
+                "search_success": enriched.search_outcome.success,
+                "search_correction_mode": enriched.search_outcome.correction_mode,
+                "search_calls": enriched.search_outcome.search_calls,
+                "search_page_fetches": enriched.search_outcome.page_fetches,
+                "search_latency_ms": enriched.search_outcome.latency_ms,
+                "search_estimated_cost": enriched.search_outcome.estimated_cost,
+                "factual_consistent": reply.factual_consistent,
+                "citations_present": reply.cited,
+                "fail_closed": reply.fail_closed,
                 "history_turns": len(history),
                 "reply_preview": reply.text[:160],
                 "reply_mode": reply_plan.mode,

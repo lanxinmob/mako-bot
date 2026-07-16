@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     searxng_result_count: int = Field(
         default=5, validation_alias=AliasChoices("SEARXNG_RESULT_COUNT", "SEARCH_RESULT_COUNT")
     )
+    search_cost_per_call: float = Field(
+        default=0.0, validation_alias=AliasChoices("SEARCH_COST_PER_CALL")
+    )
 
     # Amap
     amap_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("AMAP_KEY"))
@@ -321,6 +324,8 @@ class Settings(BaseSettings):
                 raise ValueError("Chat reply limits must be positive")
         if self.global_memory_max_records < 1000:
             raise ValueError("GLOBAL_MEMORY_MAX_RECORDS must be at least 1000")
+        if self.search_cost_per_call < 0:
+            raise ValueError("SEARCH_COST_PER_CALL cannot be negative")
         if self.outbound_greeting_cooldown_hours < 1:
             raise ValueError("OUTBOUND_GREETING_COOLDOWN_HOURS must be positive")
         if self.redis_retry_seconds < 1 or self.redis_health_check_seconds < 1:
