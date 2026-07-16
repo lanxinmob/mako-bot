@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.services.chat_engine import ChatEngine, ChatReply, ChatRequest
+from src.services.chat_context import SearchOutcome, SearchSource, VerifiedClaim
 from src.services.chat_policy import ReplyPlan
 
 
@@ -107,6 +108,8 @@ async def test_generate_returns_uncommitted_reply() -> None:
     assert reply.text == "回复"
     assert reply.model == "fake-model"
     assert reply.history[-1] == {"role": "assistant", "content": "回复"}
+    assert reply.history[-2]["content"] == "原始消息"
+    assert "联网搜索结果" not in reply.history[-2]["content"]
     assert storage.saved is None
     assert storage.records == []
 
@@ -150,3 +153,78 @@ def test_commit_persists_only_after_delivery_boundary() -> None:
     assert len(storage.records) == 1
     assert storage.records[0].role == "assistant"
     assert storage.records[0].content == "已发送"
+
+
+@pytest.mark.asyncio
+async def test_required_search_failure_does_not_call_llm() -> None:
+    engine = ChatEngine(storage=FakeStorage())
+    engine._call_llm = AsyncMock()
+    outcome = SearchOutcome(
+        required=True,
+        attempted=True,
+        failure_reason="搜索提供器不可用",
+        provider_unavailable=True,
+    )
+
+    reply = await engine.generate(make_request(search_outcome=outcome))
+
+    assert reply.fail_closed is True
+    assert "不会根据记忆或猜测" in reply.text
+    engine._call_llm.assert_not_awaited()
+
+
+def test_correction_invalidates_old_answer_and_hides_it_from_prompt() -> None:
+    engine = ChatEngine(storage=FakeStorage())
+    outcome = SearchOutcome(required=True, correction_mode=True)
+    request = make_request(
+        history=[
+            {"role": "user", "content": "昨天谁赢了"},
+            {"role": "assistant", "content": "B 队赢了"},
+        ],
+        user_text="你刚才说错了，重新查",
+        search_outcome=outcome,
+    )
+
+    prompt_history = engine._history_for_prompt(request)
+    next_history = engine._next_history(request, "联网核验失败，不猜")
+
+    assert prompt_history[-1]["content"] == "[上一轮事实回答已失效，不得作为当前事实依据。]"
+    assert next_history[1]["invalidated"] is True
+    assert next_history[1]["invalidated_reason"] == "user_correction"
+    assert next_history[-2]["content"] == "你刚才说错了，重新查"
+    assert "联网搜索结果" not in next_history[-2]["content"]
+
+
+@pytest.mark.asyncio
+async def test_verified_search_answer_is_checked_and_cited() -> None:
+    source = SearchSource(
+        "S1",
+        "官方结果",
+        "https://official.example/result",
+        "official.example",
+        "A 获胜",
+        "A 队以 2:1 获胜",
+    )
+    outcome = SearchOutcome(
+        required=True,
+        attempted=True,
+        success=True,
+        factual_mode=True,
+        realtime=True,
+        sources=(source,),
+        claims=(VerifiedClaim("A 队以 2:1 获胜", ("S1",)),),
+    )
+    engine = ChatEngine(storage=FakeStorage())
+    engine._call_llm = AsyncMock(
+        side_effect=[
+            ("A 队以 2:1 获胜。", "fake-model"),
+            ('{"consistent":true}', "fake-model"),
+        ]
+    )
+
+    reply = await engine.generate(make_request(search_outcome=outcome))
+
+    assert reply.factual_consistent is True
+    assert reply.cited is True
+    assert "https://official.example/result" in reply.text
+    assert engine._call_llm.await_count == 2

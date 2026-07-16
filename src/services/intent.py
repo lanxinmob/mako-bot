@@ -7,10 +7,50 @@ from typing import Dict, List, Optional
 from src.services.search import extract_urls
 
 
+CORRECTION_MARKERS = (
+    "你确定吗",
+    "你确定？",
+    "你确定?",
+    "你刚才说错了",
+    "刚才说错了",
+    "重新查",
+    "重新搜索",
+    "再查一次",
+    "不是这个比赛",
+    "不是这场比赛",
+)
+
+
 @dataclass
 class IntentDecision:
     name: str
     args: Dict[str, str]
+
+
+def is_correction_request(text: str) -> bool:
+    clean = "".join((text or "").lower().split())
+    return any("".join(marker.lower().split()) in clean for marker in CORRECTION_MARKERS)
+
+
+def is_dynamic_fact_query(text: str) -> bool:
+    clean = (text or "").strip()
+    fresh_tokens = (
+        "最新", "新闻", "最近", "近期", "当前", "现任", "实时", "今天", "今日",
+        "昨天", "昨日", "刚刚", "今年", "本周", "本月",
+    )
+    query_tokens = (
+        "是谁", "是什么", "多少", "哪些", "发生", "怎么样", "情况", "结果",
+        "价格", "报价", "股价", "汇率", "官网", "发布", "更新", "版本", "排名",
+        "赛程", "票房", "政策", "规定", "开放", "关闭", "什么时候", "何时",
+        "谁赢", "比分", "赛果", "战报", "战绩", "吗", "呢", "？", "?",
+    )
+    live_result_tokens = (
+        "比分", "赛果", "战报", "战绩", "比赛结果", "具体比分", "几比几", "谁赢了", "赢了吗",
+    )
+    return any(token in clean for token in live_result_tokens) or (
+        any(token in clean for token in fresh_tokens)
+        and any(token in clean for token in query_tokens)
+    )
 
 
 def _extract_target_lang(text: str) -> str:
@@ -176,22 +216,29 @@ def decide_intents(
         "谁赢了",
         "赢了吗",
     ]
-    needs_fresh_search = any(token in clean for token in fresh_tokens) and any(
-        token in clean for token in fact_lookup_tokens
+    needs_fresh_search = is_dynamic_fact_query(clean) or (
+        any(token in clean for token in fresh_tokens)
+        and any(token in clean for token in fact_lookup_tokens)
     )
     needs_live_result_search = any(token in clean for token in live_result_tokens)
 
     explicit_search = any(token in clean for token in explicit_search_tokens) or "google" in lower
+    correction_search = is_correction_request(clean)
 
     if urls and any(token in clean for token in ["总结", "摘要", "链接内容", "这篇讲了什么"]):
         intents.append(IntentDecision(name="search.summarize_url", args={"url": urls[0]}))
-    elif explicit_search or needs_fresh_search or needs_live_result_search:
+    elif correction_search or explicit_search or needs_fresh_search or needs_live_result_search:
         query = re.sub(
             r"^(请|帮我|麻烦|你能|能不能|可以)?(搜索|查一下|查一查|查下|查查|帮我查|帮忙查|搜一下|搜一搜|搜搜|帮我搜|联网|网上|google|百度)[:：]?",
             "",
             clean,
             flags=re.IGNORECASE,
         ).strip() or clean
-        intents.append(IntentDecision(name="search.web", args={"query": query}))
+        intents.append(
+            IntentDecision(
+                name="search.web",
+                args={"query": query, "correction": "true" if correction_search else "false"},
+            )
+        )
 
     return _dedupe_intents(intents)

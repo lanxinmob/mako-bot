@@ -1,0 +1,123 @@
+version: 1
+timezone: Asia/Shanghai
+metrics:
+  - search_routing_recall
+  - evidence_retrieval_success_rate
+  - answer_evidence_consistency_rate
+  - realtime_citation_coverage
+  - unavailable_fail_closed_rate
+  - correction_recovery_rate
+  - search_latency_p50_ms
+  - search_latency_p95_ms
+  - search_calls
+  - estimated_search_cost
+
+cases:
+  - id: explicit_search_001
+    category: explicit_search
+    user: "帮我搜索 Ollama Web Search API 的官方文档"
+    expected:
+      search_required: true
+      planner_fallback_allowed: true
+      citations_required: true
+
+  - id: implicit_freshness_001
+    category: implicit_freshness
+    user: "DeepSeek 现在最新的公开模型是什么？"
+    expected:
+      search_required: true
+      realtime: true
+      citations_required: true
+
+  - id: sports_result_001
+    category: sports_result
+    user: "昨天科隆 Major 的具体比分是多少？"
+    expected:
+      search_required: true
+      minimum_independent_sources: 2
+      exact_event_and_date_required: true
+
+  - id: today_yesterday_timezone_001
+    category: today_yesterday_timezone
+    clock: "2026-07-16T00:30:00+08:00"
+    user: "昨天上海发生了哪些重要新闻？"
+    expected:
+      resolved_date: "2026-07-15"
+      stale_pages_rejected: true
+
+  - id: ambiguous_entity_001
+    category: ambiguous_entity
+    history:
+      - role: user
+        content: "Falcons 和 Spirit 的比赛结果呢"
+    user: "他们下一场什么时候？"
+    expected:
+      references_resolved_from_history: true
+      search_required: true
+
+  - id: conflicting_sources_001
+    category: conflicting_sources
+    user: "这场比赛到底是谁赢了？"
+    fixtures:
+      - source: official.example
+        body: "A won"
+      - source: news.example
+        body: "B won"
+    expected:
+      fail_closed: true
+      conflict_disclosed: true
+
+  - id: no_results_001
+    category: no_results
+    user: "查一下完全不存在的赛事 XQZ-999 最终比分"
+    fixtures:
+      search_results: []
+    expected:
+      fail_closed: true
+      llm_guess_forbidden: true
+
+  - id: provider_unavailable_001
+    category: provider_unavailable
+    user: "今天人民币兑美元汇率是多少？"
+    fixtures:
+      provider_error: "timeout"
+    expected:
+      fail_closed: true
+      llm_called: false
+
+  - id: user_correction_001
+    category: user_correction
+    history:
+      - role: user
+        content: "昨天 Falcons 的比赛结果？"
+      - role: assistant
+        content: "Falcons 赢了"
+    user: "你刚才说错了，重新查"
+    expected:
+      correction_mode: true
+      old_answer_invalidated: true
+      minimum_independent_sources: 2
+      previous_error_explained: true
+
+  - id: stale_page_001
+    category: stale_page
+    clock: "2026-07-16T09:00:00+08:00"
+    user: "今天该赛事结果是什么？"
+    fixtures:
+      - url: "https://archive.example/old"
+        body_date: "2025-07-16"
+      - url: "https://official.example/current"
+        body_date: "2026-07-16"
+    expected:
+      rejected_urls:
+        - "https://archive.example/old"
+
+  - id: preview_vs_result_001
+    category: preview_vs_result
+    user: "这场比赛谁赢了？"
+    fixtures:
+      search_preview: "A won"
+      opened_page_body: "Correction: B won"
+    expected:
+      answer_uses_opened_page: true
+      answer_uses_preview_as_evidence: false
