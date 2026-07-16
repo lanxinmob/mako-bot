@@ -19,7 +19,7 @@ from src.core.config import get_settings
 from src.services.chat_policy import compact_text
 from src.services.image import describe_image_url
 from src.services.intent import decide_intents
-from src.services.llm import get_deepseek_client, has_deepseek
+from src.services.llm import get_deepseek_client, get_deepseek_model, has_deepseek
 from src.services.reminder import extract_json_object
 from src.services.search import SearchResult, fetch_page_text, web_search
 
@@ -168,7 +168,7 @@ class SearchContextBuilder:
         try:
             response = await asyncio.wait_for(
                 get_deepseek_client().chat.completions.create(
-                    model="deepseek-chat",
+                    model=get_deepseek_model(),
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.0,
                     max_tokens=500,
@@ -335,4 +335,3 @@ class ChatContextBuilder:
         if remaining:
             lines.append(f"还有{remaining}张图片未识别。")
         return "\n".join(lines)
-

@@ -193,7 +193,11 @@ class StorageService:
         if self.redis:
             self.redis.rpush(key, payload)
             self.redis.ltrim(key, -max_records, -1)
-            self.redis.expire(key, max(86400, self.settings.outbound_dedup_hours * 7200))
+            retention_hours = max(
+                self.settings.outbound_dedup_hours,
+                self.settings.outbound_greeting_cooldown_hours,
+            )
+            self.redis.expire(key, max(86400, retention_hours * 7200))
             return record
         rows = _memory.outbound_messages.setdefault(key, [])
         rows.append(record.model_dump(mode="json"))

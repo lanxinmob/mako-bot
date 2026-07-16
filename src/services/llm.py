@@ -43,6 +43,10 @@ def has_deepseek() -> bool:
     return bool(settings.deepseek_api_key)
 
 
+def get_deepseek_model() -> str:
+    return get_settings().deepseek_model
+
+
 def has_qwen() -> bool:
     settings = get_settings()
     return bool(settings.qwen_api_key)

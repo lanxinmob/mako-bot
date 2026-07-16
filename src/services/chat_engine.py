@@ -20,7 +20,13 @@ from src.core.config import get_settings
 from src.models.schemas import ChatRecord
 from src.services.chat_context import build_time_context
 from src.services.chat_policy import ReplyPlan, select_reply_plan, truncate_reply
-from src.services.llm import get_deepseek_client, get_openai_client, has_deepseek, has_openai
+from src.services.llm import (
+    get_deepseek_client,
+    get_deepseek_model,
+    get_openai_client,
+    has_deepseek,
+    has_openai,
+)
 from src.services.mako_context import MakoRuntimeContext
 from src.services.storage import StorageService
 
@@ -182,16 +188,17 @@ class ChatEngine:
 
     async def _call_llm(self, messages: List[dict], *, max_tokens: int = 4096) -> tuple[str, str]:
         if has_deepseek():
+            model = get_deepseek_model()
             response = await asyncio.wait_for(
                 get_deepseek_client().chat.completions.create(
-                    model="deepseek-chat",
+                    model=model,
                     messages=messages,
                     temperature=0.1,
                     max_tokens=max_tokens,
                 ),
                 timeout=40.0,
             )
-            return (response.choices[0].message.content or "").strip(), "deepseek-chat"
+            return (response.choices[0].message.content or "").strip(), model
         if has_openai():
             response = await asyncio.wait_for(
                 get_openai_client().chat.completions.create(

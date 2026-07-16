@@ -9,7 +9,7 @@ from typing import Iterable
 from nonebot.log import logger
 
 from src.models.schemas import ChatRecord
-from src.services.llm import get_deepseek_client, has_deepseek
+from src.services.llm import get_deepseek_client, get_deepseek_model, has_deepseek
 from src.services.storage import StorageService
 from src.services.vector_store import VectorStore
 
@@ -93,7 +93,7 @@ class KnowledgePrecipitationService:
 """.strip()
         response = await asyncio.wait_for(
             get_deepseek_client().chat.completions.create(
-                model="deepseek-chat",
+                model=get_deepseek_model(),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=1600,
@@ -132,7 +132,7 @@ class KnowledgePrecipitationService:
 """.strip()
         response = await asyncio.wait_for(
             get_deepseek_client().chat.completions.create(
-                model="deepseek-chat",
+                model=get_deepseek_model(),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
                 max_tokens=1400,
