@@ -142,6 +142,24 @@ async def web_search(query: str, num: Optional[int] = None) -> List[SearchResult
     return await ollama_search(query, num=num)
 
 
+async def ollama_fetch_page(url: str) -> str:
+    settings = get_settings()
+    if not settings.ollama_api_key:
+        raise NotConfiguredError("OLLAMA_API_KEY is not configured.")
+
+    data = await fetch_json(
+        "https://ollama.com/api/web_fetch",
+        json_data={"url": url},
+        headers={
+            "Authorization": f"Bearer {settings.ollama_api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+        timeout=30.0,
+    )
+    return str(data.get("content") or "").strip()
+
+
 def extract_text_from_html(content: str) -> str:
     content = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", content)
     content = re.sub(r"(?is)<.*?>", " ", content)
@@ -153,14 +171,42 @@ def extract_text_from_html(content: str) -> str:
 async def fetch_page_text(url: str, max_chars: int = 6000) -> str:
     try:
         safe_url = await validate_public_url(url)
-        html_text = await fetch_text(safe_url)
     except Exception as exc:
-        logger.warning(f"Failed to fetch url content: {exc}")
+        logger.warning(
+            "Page URL validation failed url={} error_type={} error={}",
+            url,
+            type(exc).__name__,
+            exc,
+        )
         return ""
-    text = extract_text_from_html(html_text)
-    if len(text) > max_chars:
-        return text[:max_chars]
-    return text
+
+    try:
+        text = await ollama_fetch_page(safe_url)
+        if not text:
+            raise ValueError("Ollama web_fetch returned empty content")
+    except Exception as ollama_exc:
+        logger.warning(
+            "Ollama web_fetch failed url={} error_type={} error={}",
+            safe_url,
+            type(ollama_exc).__name__,
+            ollama_exc,
+        )
+        try:
+            html_text = await fetch_text(
+                safe_url,
+                validate_redirect=validate_public_url,
+            )
+            text = extract_text_from_html(html_text)
+        except Exception as local_exc:
+            logger.warning(
+                "Local page fetch failed url={} error_type={} error={}",
+                safe_url,
+                type(local_exc).__name__,
+                local_exc,
+            )
+            return ""
+
+    return text[:max_chars]
 
 
 def extract_urls(text: str) -> List[str]:
