@@ -84,3 +84,71 @@ async def test_ollama_search_caps_requested_results_at_api_limit(monkeypatch) ->
     await search.ollama_search("query", num=99)
 
     assert captured["json_data"]["max_results"] == 10
+
+
+@pytest.mark.asyncio
+async def test_ollama_fetch_page_posts_authenticated_json(monkeypatch) -> None:
+    monkeypatch.setattr(
+        search,
+        "get_settings",
+        lambda: SimpleNamespace(ollama_api_key="test-key"),
+    )
+    captured = {}
+
+    async def fake_fetch_json(url: str, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+        return {"title": "Example", "content": "  Main page content  ", "links": []}
+
+    monkeypatch.setattr(search, "fetch_json", fake_fetch_json)
+
+    content = await search.ollama_fetch_page("https://example.com/article")
+
+    assert content == "Main page content"
+    assert captured == {
+        "url": "https://ollama.com/api/web_fetch",
+        "json_data": {"url": "https://example.com/article"},
+        "headers": {
+            "Authorization": "Bearer test-key",
+            "Content-Type": "application/json",
+        },
+        "method": "POST",
+        "timeout": 30.0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_fetch_page_prefers_ollama_web_fetch(monkeypatch) -> None:
+    async def fake_validate(url: str) -> str:
+        return url
+
+    async def fake_ollama_fetch(_url: str) -> str:
+        return "Ollama extracted content"
+
+    async def unexpected_local_fetch(*_args, **_kwargs) -> str:
+        raise AssertionError("local fetch should not run when Ollama succeeds")
+
+    monkeypatch.setattr(search, "validate_public_url", fake_validate)
+    monkeypatch.setattr(search, "ollama_fetch_page", fake_ollama_fetch)
+    monkeypatch.setattr(search, "fetch_text", unexpected_local_fetch)
+
+    assert await search.fetch_page_text("https://example.com") == "Ollama extracted content"
+
+
+@pytest.mark.asyncio
+async def test_fetch_page_falls_back_to_local_fetch(monkeypatch) -> None:
+    async def fake_validate(url: str) -> str:
+        return url
+
+    async def failed_ollama_fetch(_url: str) -> str:
+        raise RuntimeError("upstream unavailable")
+
+    async def fake_local_fetch(_url: str, **kwargs) -> str:
+        assert kwargs["validate_redirect"] is fake_validate
+        return "<html><body>Local fallback content</body></html>"
+
+    monkeypatch.setattr(search, "validate_public_url", fake_validate)
+    monkeypatch.setattr(search, "ollama_fetch_page", failed_ollama_fetch)
+    monkeypatch.setattr(search, "fetch_text", fake_local_fetch)
+
+    assert await search.fetch_page_text("https://example.com") == "Local fallback content"
