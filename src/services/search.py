@@ -108,69 +108,38 @@ def _dedupe_and_limit(results: List[SearchResult], limit: int) -> List[SearchRes
     return cleaned
 
 
-async def google_search(query: str, num: Optional[int] = None) -> List[SearchResult]:
+async def ollama_search(query: str, num: Optional[int] = None) -> List[SearchResult]:
     settings = get_settings()
-    if not settings.google_api_key or not settings.google_cx:
-        raise NotConfiguredError("Google Custom Search is not configured.")
-    count = num or settings.google_result_count
+    if not settings.ollama_api_key:
+        raise NotConfiguredError("OLLAMA_API_KEY is not configured.")
+
+    count = min(max(num or settings.ollama_search_result_count, 1), 10)
     data = await fetch_json(
-        "https://www.googleapis.com/customsearch/v1",
-        params={"key": settings.google_api_key, "cx": settings.google_cx, "q": query, "num": count},
+        "https://ollama.com/api/web_search",
+        json_data={"query": query, "max_results": count},
+        headers={
+            "Authorization": f"Bearer {settings.ollama_api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+        timeout=25.0,
     )
-    items = data.get("items", [])
+    items = data.get("results", [])
     results: List[SearchResult] = []
     for item in items:
         results.append(
             SearchResult(
-                title=item.get("title", "Untitled"),
-                link=item.get("link", ""),
-                snippet=item.get("snippet", ""),
-                source="google",
+                title=item.get("title") or "Untitled",
+                link=item.get("url") or "",
+                snippet=item.get("content") or "",
+                source="ollama",
             )
         )
     return _dedupe_and_limit(results, count)
 
 
-async def searxng_search(query: str, num: Optional[int] = None) -> List[SearchResult]:
-    settings = get_settings()
-    if not settings.searxng_base_url:
-        raise NotConfiguredError("SEARXNG_BASE_URL is not configured.")
-
-    limit = num or settings.searxng_result_count
-    data = await fetch_json(
-        settings.searxng_base_url.rstrip("/") + "/search",
-        params={"q": query, "format": "json"},
-        timeout=25.0,
-    )
-    raw_items = data.get("results", [])
-    results: List[SearchResult] = []
-    for item in raw_items:
-        engines = item.get("engines")
-        if isinstance(engines, list) and engines:
-            source = ",".join(str(engine) for engine in engines[:3])
-        else:
-            source = str(item.get("engine") or "searxng")
-        try:
-            score = float(item.get("score") or 0.0)
-        except (TypeError, ValueError):
-            score = 0.0
-        results.append(
-            SearchResult(
-                title=item.get("title") or "Untitled",
-                link=item.get("url") or item.get("link") or "",
-                snippet=item.get("content") or item.get("snippet") or "",
-                source=source,
-                score=score,
-            )
-        )
-    return _dedupe_and_limit(results, limit)
-
-
 async def web_search(query: str, num: Optional[int] = None) -> List[SearchResult]:
-    settings = get_settings()
-    if settings.search_provider == "searxng":
-        return await searxng_search(query, num=num)
-    return await google_search(query, num=num)
+    return await ollama_search(query, num=num)
 
 
 def extract_text_from_html(content: str) -> str:
