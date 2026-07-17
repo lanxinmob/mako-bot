@@ -74,17 +74,12 @@ class Settings(BaseSettings):
     tianxin_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("tianxin_key", "TIANXIN_KEY"))
 
     # Web Search
-    search_provider: Literal["google", "searxng"] = Field(
-        default="google", validation_alias=AliasChoices("SEARCH_PROVIDER")
+    ollama_api_key: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("OLLAMA_API_KEY")
     )
-    google_api_key: Optional[str] = Field(default=None, validation_alias=AliasChoices("GOOGLE_API_KEY"))
-    google_cx: Optional[str] = Field(default=None, validation_alias=AliasChoices("GOOGLE_CX", "GOOGLE_CSE_ID"))
-    google_result_count: int = Field(default=5, validation_alias=AliasChoices("GOOGLE_RESULT_COUNT"))
-    searxng_base_url: Optional[str] = Field(
-        default=None, validation_alias=AliasChoices("SEARXNG_BASE_URL")
-    )
-    searxng_result_count: int = Field(
-        default=5, validation_alias=AliasChoices("SEARXNG_RESULT_COUNT", "SEARCH_RESULT_COUNT")
+    ollama_search_result_count: int = Field(
+        default=5,
+        validation_alias=AliasChoices("OLLAMA_SEARCH_RESULT_COUNT", "SEARCH_RESULT_COUNT"),
     )
     search_cost_per_call: float = Field(
         default=0.0, validation_alias=AliasChoices("SEARCH_COST_PER_CALL")
@@ -326,6 +321,8 @@ class Settings(BaseSettings):
             raise ValueError("GLOBAL_MEMORY_MAX_RECORDS must be at least 1000")
         if self.search_cost_per_call < 0:
             raise ValueError("SEARCH_COST_PER_CALL cannot be negative")
+        if not 1 <= self.ollama_search_result_count <= 10:
+            raise ValueError("OLLAMA_SEARCH_RESULT_COUNT must be between 1 and 10")
         if self.outbound_greeting_cooldown_hours < 1:
             raise ValueError("OUTBOUND_GREETING_COOLDOWN_HOURS must be positive")
         if self.redis_retry_seconds < 1 or self.redis_health_check_seconds < 1:
