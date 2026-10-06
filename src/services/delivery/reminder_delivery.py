@@ -9,7 +9,7 @@ from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from src.services.persistence.reminder_state import REVISION_KEY, ReminderStateStore
 from .dispatcher import dispatch
 from .effects.producer import production_plan, settle_confirmed
-from .observation import observe_group_output
+from .observation import observe_group_output, observe_plugin_output
 from .state import DeliveryAttempt, DeliverySpec, DeliveryStore, DeliveryUnavailable
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,7 @@ class ReminderDelivery:
             acknowledged = result is True or (
                 isinstance(result, dict) and result.get("message_id") is not None)
             if acknowledged:
+                observe_plugin_output(bot.self_id, "group", frozen.target_id, result, message, "reminder")
                 try:
                     observe_group_output(bot.self_id, int(frozen.target_id), result, message, "reminder")
                 except Exception:

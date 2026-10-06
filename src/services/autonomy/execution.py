@@ -9,7 +9,7 @@ from src.models.schemas import ChatRecord
 from src.services.delivery.dedup import align_time_greeting
 from src.services.delivery.dedup import canonical_intent
 from src.services.delivery.dispatcher import dispatch, send_to_private, acknowledged_result
-from src.services.delivery.observation import observe_group_output
+from src.services.delivery.observation import observe_group_output, observe_plugin_output
 from .models import AutonomyDecision, PendingAction, TargetType
 from .approval import ApprovalUnavailable
 from .repository import PendingConflict
@@ -156,6 +156,9 @@ async def send_action(ctx,
         acknowledged = acknowledged_result(result)
         if approval_attempt is not None:
             approval_attempt.acknowledged = acknowledged
+        if acknowledged:
+            observe_plugin_output(getattr(bot, "self_id", None), target_type, target_id,
+                                  result, rendered, "autonomous")
         if acknowledged and target_type == "group":
             observe_group_output(getattr(bot, "self_id", None), target_id,
                                  result, rendered, "autonomous")

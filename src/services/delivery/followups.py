@@ -8,6 +8,7 @@ from nonebot.adapters.onebot.v11 import Message
 
 from src.services.persistence.followups import FollowupSource, revision_key
 from .dispatcher import dispatch
+from .observation import observe_plugin_output
 from .effects.producer import production_plan, settle_confirmed
 from .state import DeliveryAttempt, DeliverySpec, DeliveryStore, DeliveryUnavailable
 
@@ -43,7 +44,11 @@ class FollowupDelivery:
 
         async def send(frozen):
             result = await bot.send_private_msg(user_id=int(frozen.target_id), message=Message(frozen.payload))
-            return result is True or (isinstance(result, dict) and result.get("message_id") is not None)
+            acknowledged = result is True or (isinstance(result, dict) and result.get("message_id") is not None)
+            if acknowledged:
+                observe_plugin_output(frozen.bot_id, "private", frozen.target_id, result,
+                                      Message(frozen.payload), "reminder")
+            return acknowledged
 
         try:
             await self.schedule("private", user_id, lambda: attempt.send(send), category="reminder")

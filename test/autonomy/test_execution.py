@@ -77,8 +77,12 @@ async def test_sender_failure_leaves_success_state_untouched(scene, target):
 
 
 @pytest.mark.asyncio
-async def test_success_is_recorded_after_delivery(scene):
+async def test_success_is_recorded_after_delivery(scene, monkeypatch):
     ctx, bot = scene
+    from src.services.autonomy import execution
+    plugin_observer = Mock()
+    monkeypatch.setattr(execution, "observe_plugin_output", plugin_observer)
+    bot.self_id = "9"
 
     async def delivered(**kwargs):
         assert kwargs == {"group_id": 7, "message": "合成测试内容"}
@@ -87,6 +91,8 @@ async def test_success_is_recorded_after_delivery(scene):
 
     bot.send_group_msg.side_effect = delivered
     assert await send_action(ctx, bot, "group", 7, "合成测试内容", "fixture")
+    plugin_observer.assert_called_once_with("9", "group", 7, {"message_id": 1},
+                                           "合成测试内容", "autonomous")
     ctx.governance.consume_cost.assert_called_once_with(99, 0.01)
     ctx.repository.set_cooldown.assert_called_once_with("group", 7)
     ctx.outbound_dedup.record.assert_called_once()
