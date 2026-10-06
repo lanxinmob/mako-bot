@@ -1,7 +1,8 @@
 """Real QQ routing with synthetic profiles and transport only."""
 import asyncio
 import importlib
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
 import nonebot
@@ -19,9 +20,11 @@ from test.features.discoveries.test_plugin import plugin
 @pytest.fixture
 def runtime(plugin, monkeypatch):
     storage_module = importlib.import_module("src.services.persistence")
-    knowledge = importlib.import_module("src.services.memory.knowledge_precipitation")
+    # Profile routing needs neither the embedding runtime nor the daily model job.
+    knowledge = ModuleType("src.services.memory.knowledge_precipitation")
+    knowledge.KnowledgePrecipitationService = lambda: SimpleNamespace()
     monkeypatch.setattr(storage_module, "StorageService", Mock)
-    monkeypatch.setattr(knowledge, "KnowledgePrecipitationService", lambda: SimpleNamespace())
+    monkeypatch.setitem(sys.modules, knowledge.__name__, knowledge)
     loaded = (nonebot.get_plugin("precipitate_knowledge") or
               nonebot.load_plugin("src.plugins.precipitate_knowledge"))
     assert loaded is not None
