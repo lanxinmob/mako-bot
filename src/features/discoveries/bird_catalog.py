@@ -25,7 +25,7 @@ class BirdRecord:
 
 
 # Chinese names, rank, Aves and IDs checked against iNaturalist taxa on VERIFIED_DAY.
-# Daily selection is deliberately limited to species with verified reusable images.
+# Offline fallback is limited to species with verified reusable images.
 DAILY_BIRDS = (
     BirdRecord(
         "Passer montanus", "麻雀", 13851,

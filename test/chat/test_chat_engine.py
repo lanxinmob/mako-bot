@@ -69,12 +69,35 @@ def test_knowledge_failure_degrades_to_empty_context() -> None:
     assert "暂无相关长期记忆" in messages[0]["content"]
 
 
-def test_profile_failure_degrades_to_first_meeting_context() -> None:
+def test_profile_failure_does_not_claim_first_meeting() -> None:
     storage = FakeStorage()
     storage.get_profile = lambda _user_id: (_ for _ in ()).throw(RuntimeError("redis down"))
     engine = ChatEngine(storage=storage)
     messages = engine._build_messages(make_request())
-    assert "这是首次认识" in messages[0]["content"]
+    assert "档案暂时读取失败" in messages[0]["content"]
+    assert "这是首次认识" not in messages[0]["content"]
+
+
+def test_original_character_details_and_current_user_profile_reach_model_prompt() -> None:
+    storage = FakeStorage()
+    storage.get_profile = lambda user_id: {"profile_text": {7: "喜欢红茶", 8: "喜欢咖啡"}[user_id]}
+    engine = ChatEngine(storage=storage, knowledge_search=lambda _: [])
+    first = engine._build_messages(make_request(user_text="还记得我吗"))[0]["content"]
+    second = engine._build_messages(make_request(user_id=8, nickname="小夏"))[0]["content"]
+    assert "【角色档案】" in first and "朝武家" in first and "巫女姬的护卫" in first
+    assert "恐高" in first and "雏鸟放回鸟窝" in first and "认真夸奖" in first
+    assert "喜欢红茶" in first and "喜欢咖啡" not in first
+    assert "用户画像：" in second
+    assert "喜欢咖啡" in second and "喜欢红茶" not in second
+    assert "不要回答成茉子的自我介绍" in first
+
+
+def test_missing_profile_does_not_invent_first_meeting() -> None:
+    storage = FakeStorage()
+    storage.get_profile = lambda _: None
+    prompt = ChatEngine(storage=storage)._build_messages(make_request())[0]["content"]
+    assert "暂无已保存的档案" in prompt
+    assert "这是首次认识" not in prompt
 
 
 def test_private_vector_memory_is_filtered_by_user_id() -> None:

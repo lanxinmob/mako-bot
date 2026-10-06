@@ -1,9 +1,7 @@
 """Behavioral checks for historical filtering, time and provenance labels."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 import re
-import subprocess
-import sys
 
 import pytest
 
@@ -32,39 +30,22 @@ def test_unknown_or_conflicting_filter_offers_existing_options(query):
     text = journey(query, now=NOW).text
     assert text.startswith("还没有符合这些关键词的故事。")
     assert "唐代长安" in text and "北宋汴京" in text
-    assert "史实背景：" not in text
+    assert "历史背景：" not in text
 
 
-def test_default_is_stable_after_reroll_and_across_processes():
-    first = journey(user_id=2048, now=NOW)
-    journey("再来", user_id=2048, now=NOW)
-    assert journey(user_id=2048, now=NOW) == first
-    script = (
-        "from datetime import datetime; "
-        "from src.features.discoveries.journeys import journey; "
-        "print(journey(user_id=2048, now=datetime(2026,10,6,12)).text)"
-    )
-    output = subprocess.check_output(
-        [sys.executable, "-X", "utf8", "-B", "-c", script], text=True, encoding="utf-8"
-    )
-    assert output.strip() == first.text
+def test_default_cycles_through_all_stories_without_adjacent_repeats():
+    replies = [journey(user_id=2048, now=NOW) for _ in range(24)]
+    for start in range(0, 24, 8):
+        assert len(set(r.text for r in replies[start:start + 8])) == 8
+    assert all(a != b for a, b in zip(replies, replies[1:]))
 
 
-def test_beijing_day_boundary_and_user_specific_selection():
-    utc_before = datetime(2026, 10, 5, 15, 59, tzinfo=timezone.utc)
-    utc_after = utc_before + timedelta(minutes=1)
-    for user_id in (0, 1, 2048):
-        assert journey(user_id=user_id, now=utc_before) == journey(
-            user_id=user_id, now=datetime(2026, 10, 5, 23, 59)
-        )
-        assert journey(user_id=user_id, now=utc_after) == journey(
-            user_id=user_id, now=datetime(2026, 10, 6, 0)
-        )
-    assert len({journey(user_id=i, now=NOW).text for i in range(16)}) > 1
-    assert any(
-        journey(user_id=i, now=utc_before) != journey(user_id=i, now=utc_after)
-        for i in range(16)
-    )
+def test_filtered_pool_also_rotates_and_other_users_do_not_consume_it():
+    first = journey("中国", user_id=2049, now=NOW)
+    journey("中国", user_id=2050, now=NOW)
+    second = journey("中国", user_id=2049, now=NOW)
+    assert first != second
+    assert "中国" in first.text and "中国" in second.text
 
 
 def test_reroll_does_not_repeat_previous_card():
@@ -78,7 +59,7 @@ def test_reroll_does_not_repeat_previous_card():
 @pytest.mark.parametrize("query", ["两河流域", "埃及"])
 def test_bce_year_is_positive_and_marked_approximate(query):
     text = journey(query, now=NOW).text
-    assert re.search(r"故事落点（虚构设定）：约公元前[1-9]\d*年", text)
+    assert re.search(r"约公元前[1-9]\d*年", text)
     assert "公元前-" not in text
 
 
@@ -99,9 +80,9 @@ def test_short_cards_separate_facts_from_original_fiction(query, source):
     reply = journey(query, now=NOW)
     assert isinstance(reply, DiscoveryReply)
     assert reply.image_url is None
-    assert "史实背景：" in reply.text
-    assert "原创虚构（人物与情节）：" in reply.text
-    assert "来源（仅支持史实背景；核对2026-10-06）：" in reply.text
+    assert "历史背景：" in reply.text
+    assert "小故事（虚构）：" in reply.text
+    assert "背景出处（核对2026-10-06）：" in reply.text
     assert source in reply.text
     assert len(re.sub(r"https://\S+", "", reply.text)) <= 400
     assert "寿命" not in reply.text and "享年" not in reply.text

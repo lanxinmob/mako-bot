@@ -192,5 +192,5 @@ def test_help_examples_are_supported_complete_commands():
         assert text in HELP
         command = parse_command(text)
         assert command is not None
-        assert "史实背景：" in journey(command.argument, user_id=321).text
+        assert "历史背景：" in journey(command.argument, user_id=321).text
     assert "传送 再来" in journey("火星").text
