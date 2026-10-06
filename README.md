@@ -18,6 +18,9 @@
 
 ## 📋 最近更新
 
+[2026/10/06，本地开发工作区]
+- 新增明确命令的小鸟、历史传送和真实期刊查询；用法及数据来源见下方说明。
+
 [2026/07/05]
 - 图片处理安全加固：增加下载大小上限、PIL 解码前尺寸校验、用户级速率限制、临时文件自动清理，防止低内存实例 OOM
 - 新增每日健康检查脚本（cron），自动检测服务状态、内存占用、OOM 事件，异常时自动重启
@@ -28,6 +31,9 @@
 
 ## 🧩 功能特性
 ### 已开发功能
+- [x] 小鸟：鸟图、物种资料及图片授权来源
+- [x] 传送：有史实出处的历史背景与原创生活小故事
+- [x] 期刊：真实刊物查询与按近期论文寻找相关期刊
 - [x] 每日发送早安
 - [x] 以茉子身份与用户进行聊天
 - [x] 每日发送各种最新资讯
@@ -36,6 +42,30 @@
 - [x] 创建、修改、删除定时提醒的功能
 - [x] 回复时引用消息
 - [x] 在服务器上搭建代理服务
+
+#### 群聊里的三个小功能
+
+| 命令 | 用法 |
+| --- | --- |
+| `小鸟` | 每日鸟种卡；`小鸟 麻雀` 或 `小鸟 Passer montanus` 查询物种 |
+| `传送` | 每日历史小故事；`传送 唐朝` / `传送 埃及` 筛选；`传送 再来` 换一站 |
+| `期刊 Nature` | 查刊名；`期刊 1932-6203` 按 ISSN 查真实刊物 |
+| `发表` / `投稿` | 每日真实期刊；`投稿 machine learning` 按近期相关文章寻找刊物 |
+| `发现帮助` | 查看命令示例 |
+
+支持在命令前加昵称或 @机器人；参数与命令之间用空格。这些功能只响应明确命令，
+不调用付费模型，图文合成一次发送。同一人三秒内重复同一命令会静默忽略，
+其他命令保留并按现有发送队列限频。
+
+默认插件清单已包含 `discoveries`。若设置了 `PLUGIN_ENABLE_LIST`，需将
+`discoveries` 加入该清单。已有工具白名单需分别允许 `discoveries.bird`、
+`discoveries.journey`、`discoveries.journal`、`discoveries.help`；禁用名单与黑名单仍生效。
+全局 `TOOL_ENABLE_LIST` / `TOOL_DISABLE_LIST` 和群/私聊的工具名单均会检查；发送前再次核对权限。
+
+每日鸟图首批两种，指定鸟名检索不限于这两种。鸟图注明物种、来源和授权；历史背景与虚构故事分开标注；期刊提供 Crossref
+记录和论文 DOI，没有可靠数据的分区、影响因子和版面费不填写。期刊主题检索
+用于发现相关刊物，最终仍需阅读刊物官网的范围和投稿要求。
+详细来源与限制见 [发现功能说明](docs/features/discoveries/implementation.md)。
 #### RAG（检索增强生成）
 - [x] 每天通过聊天记录建立或更新用户画像个人档案
 - [x] 茉子每日日记，记录有趣或重要事件
@@ -154,3 +184,9 @@ nb run
 - [nonebot_plugin-apscheduler](https://github.com/nonebot/plugin-apscheduler)
 - [nonebot_plugin_lagrange](https://github.com/Lonely-Sails/nonebot-plugin-lagrange)
 - [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
+
+## 开发与 Agent 协作
+
+项目结构见 [项目概览](docs/agent/project.md)，开发规范见 [开发指南](docs/agent/development.md)。
+Agent 开工前读取 [AGENTS.md](AGENTS.md)；按 >400 行 / 目录直属 >10 文件检测，重构由开发者确认。
+本次 A 基线重构的映射与验证分别见 [迁移说明](docs/refactor/migration.md) 和 [执行状态](docs/refactor/status.md)。

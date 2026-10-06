@@ -9,7 +9,7 @@ from nonebot.params import ArgPlainText, CommandArg
 from nonebot.adapters.onebot.v11 import Message
 
 from src.core.errors import NotConfiguredError
-from src.services.weather import get_weather
+from src.services.integrations.weather import get_weather
 
 
 weather_handler = on_command("天气", aliases={"weather"}, priority=10, block=True)

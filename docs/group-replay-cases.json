@@ -1,0 +1,104 @@
+{
+  "description": "Synthetic acceptance scenarios. All identifiers and messages are fictional. No real QQ transcript.",
+  "bot_id": "42",
+  "context_ttl_seconds": 600,
+  "context_max_events": 60,
+  "scenarios": [
+    {
+      "id": "other_people_conversation",
+      "events": [
+        {"id": "1", "user": "7", "text": "明天来吗", "mentions": ["8"]},
+        {"id": "2", "user": "8", "text": "来，几点", "reply_to": "1"},
+        {"id": "3", "user": "7", "text": "八点吧", "reply_to": "2"}
+      ],
+      "expected_public_chat_messages": 0,
+      "expected_reply_model_calls": 0
+    },
+    {
+      "id": "third_person_is_not_invocation",
+      "events": [
+        {"id": "1", "user": "7", "text": "我觉得茉子说得不错"},
+        {"id": "2", "user": "8", "text": "mako今天说过了"}
+      ],
+      "expected_public_chat_messages": 0
+    },
+    {
+      "id": "closure_cancels_slow_generation",
+      "events": [
+        {"id": "1", "user": "7", "text": "这个报错怎么看", "mentions": ["42"]},
+        {"id": "2", "user": "7", "text": "解决了，谢谢"}
+      ],
+      "reply_model_completes_after_event": "2",
+      "expected_public_chat_messages": 0,
+      "expected_successful_history_commits": 0
+    },
+    {
+      "id": "another_person_answered",
+      "events": [
+        {"id": "1", "user": "7", "text": "茉子，这个路径在哪"},
+        {"id": "2", "user": "8", "text": "在项目根目录", "reply_to": "1"},
+        {"id": "3", "user": "7", "text": "找到了，谢谢"}
+      ],
+      "reply_model_completes_after_event": "3",
+      "expected_public_chat_messages": 0
+    },
+    {
+      "id": "latest_explicit_call_wins",
+      "events": [
+        {"id": "1", "user": "7", "text": "茉子，第一种方案呢"},
+        {"id": "2", "user": "8", "text": "茉子，先帮我看第二种"}
+      ],
+      "reply_completion_order": ["2", "1"],
+      "expected_reply_targets": ["2"],
+      "old_candidate_may_cancel_new_candidate": false
+    },
+    {
+      "id": "same_user_followup_then_interruption",
+      "events": [
+        {"id": "1", "user": "7", "text": "茉子，你更推荐哪一种"},
+        {"id": "2", "user": "42", "text": "第二种维护起来方便些", "reply_to": "1", "successfully_sent": true},
+        {"id": "3", "user": "7", "text": "那缺点呢"},
+        {"id": "4", "user": "8", "text": "明天几点出门", "mentions": ["9"]},
+        {"id": "5", "user": "7", "text": "我八点到"}
+      ],
+      "followup_eligible": ["3"],
+      "followup_ineligible": ["5"]
+    },
+    {
+      "id": "shared_group_budget",
+      "scheduled_outputs": [
+        {"id": "1", "category": "chat"},
+        {"id": "2", "category": "chat"},
+        {"id": "3", "category": "chat"},
+        {"id": "4", "category": "chat"},
+        {"id": "5", "category": "news"},
+        {"id": "6", "category": "autonomous"},
+        {"id": "7", "category": "reminder"}
+      ],
+      "maximum_chat_attempts_in_60_seconds": 3,
+      "maximum_unsolicited_attempts_in_60_seconds": 1,
+      "minimum_send_spacing_seconds": 2,
+      "reminder_removed_only_after_success": true
+    },
+    {
+      "id": "tool_is_not_disposable_chat",
+      "events": [
+        {"id": "1", "user": "7", "text": "翻译这段文字", "kind": "tool", "mentions": ["42"]},
+        {"id": "2", "user": "8", "text": "明天去哪里"}
+      ],
+      "unrelated_event_cancels_tool": false,
+      "tool_charged_on_failure": false
+    },
+    {
+      "id": "ephemeral_context_expiration",
+      "event_count": 61,
+      "assertions": [
+        "Only the newest 60 events are retained",
+        "Events expire 600 seconds after local receipt even if remote timestamps are in the future",
+        "Groups do not share windows, candidates or following-speaker leases",
+        "Restarted service has no context",
+        "Observing ambient chat does not implicitly persist it to long-term memory"
+      ]
+    }
+  ]
+}

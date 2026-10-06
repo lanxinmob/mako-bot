@@ -1,0 +1,116 @@
+.owner-shell {
+  width: min(1480px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 18px 0 96px;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(148px, auto) minmax(420px, 1fr) minmax(280px, 480px);
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 253, 246, 0.94);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.brand {
+  display: grid;
+  gap: 2px;
+  min-width: 132px;
+}
+
+.brand strong {
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.brand span, .toolbar span, .progress-dock span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.nav-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nav-tabs button,
+.token-row button {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.nav-tabs button:hover,
+.nav-tabs button.active {
+  border-color: rgba(34, 93, 125, 0.28);
+  background: #e5f0f5;
+  color: var(--blue);
+}
+
+.token-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 10px;
+}
+
+.token-row input,
+.toolbar input,
+.toolbar select {
+  min-width: 0;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 11px;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.token-row button {
+  background: var(--ink);
+  color: white;
+}
+
+.token-row button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.toolbar label {
+  display: grid;
+  gap: 5px;
+}
+
+.error-text {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border: 1px solid rgba(180, 66, 56, 0.28);
+  border-radius: 8px;
+  background: #fff3f1;
+  color: var(--red);
+  font-weight: 800;
+}
+
+.view-stack {
+  display: grid;
+  gap: 14px;
+}

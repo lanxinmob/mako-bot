@@ -9,8 +9,8 @@ from nonebot.params import ArgPlainText, CommandArg
 from nonebot.adapters.onebot.v11 import Message
 from nonebot_plugin_apscheduler import scheduler
 
-from src.services.knowledge_precipitation import KnowledgePrecipitationService
-from src.services.storage import StorageService
+from src.services.memory.knowledge_precipitation import KnowledgePrecipitationService
+from src.services.persistence import StorageService
 
 
 service = KnowledgePrecipitationService()

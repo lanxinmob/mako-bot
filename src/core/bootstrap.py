@@ -11,6 +11,7 @@ from src.core.config import get_settings
 
 APPLICATION_PLUGINS = (
     "chat",
+    "discoveries",
     "autonomy",
     "governance",
     "health",

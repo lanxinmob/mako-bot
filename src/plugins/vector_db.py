@@ -2,7 +2,7 @@ from typing import List
 
 from nonebot.log import logger
 
-from src.services.vector_store import VectorStore
+from src.services.memory.vector_store import VectorStore
 
 
 _vector_store = VectorStore()

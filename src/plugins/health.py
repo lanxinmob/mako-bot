@@ -9,8 +9,9 @@ from nonebot import get_driver
 from nonebot.log import logger
 
 from src.core.config import get_settings
-from src.services.llm import has_deepseek, has_openai
-from src.services.redis import get_redis
+from src.services.integrations.llm import has_deepseek
+from src.services.integrations.llm import has_openai
+from src.services.persistence.backends.redis import get_redis
 
 
 driver = get_driver()

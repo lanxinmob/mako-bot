@@ -1,0 +1,34 @@
+:root {
+  color-scheme: light;
+  font-family: "Aptos", "Noto Sans SC", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  background: #e9ede6;
+  color: #20231f;
+  --ink: #20231f;
+  --muted: #637064;
+  --paper: #fffdf6;
+  --panel: #f7f8f1;
+  --line: #d8ded4;
+  --blue: #225d7d;
+  --green: #2f7150;
+  --red: #a94338;
+  --gold: #ad7b24;
+  --wash: rgba(34, 93, 125, 0.08);
+  --shadow: 0 12px 32px rgba(36, 42, 34, 0.08);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    linear-gradient(rgba(32, 35, 31, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(32, 35, 31, 0.035) 1px, transparent 1px),
+    radial-gradient(circle at 18% 0%, rgba(173, 123, 36, 0.12), transparent 34rem),
+    #e9ede6;
+  background-size: 32px 32px, 32px 32px, auto, auto;
+}
+
+button, input, select { font: inherit; }
+button { cursor: pointer; }

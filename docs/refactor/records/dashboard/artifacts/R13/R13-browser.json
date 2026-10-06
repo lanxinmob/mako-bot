@@ -1,0 +1,224 @@
+[
+  {
+    "width": 1360,
+    "states": [
+      {
+        "label": "no-token",
+        "hash": "d38ae91ce97f0c2b43ba83817d404bdae3b1894aecb72eae21a16466f7ee346f",
+        "overflow": false
+      },
+      {
+        "label": "401",
+        "hash": "d101d0bf1e3475c05d591af6af5d7f832af4ac591c6ee394eab44478419b817e",
+        "overflow": false
+      },
+      {
+        "label": "overview",
+        "hash": "ef5ac867bde3fb9b056de5ed0c7cc4e549e2002a4d4ccd9a80083d06d71b3060",
+        "overflow": false
+      },
+      {
+        "label": "记忆",
+        "hash": "3385ec0e82f9e20afa8c27607414780e33c73551b1cfe15013052055b054eb93",
+        "overflow": false
+      },
+      {
+        "label": "人物",
+        "hash": "a064e662545b7b23339e0cc6900254e670091ae71b38368d7b3f96f1bd340572",
+        "overflow": false
+      },
+      {
+        "label": "人物-expanded",
+        "hash": "4187fbf33f8ff824c27d826a4d7342457b5394deba28e6c3dff709228b6484c0",
+        "overflow": false
+      },
+      {
+        "label": "思考",
+        "hash": "c10aa296472875f08fe8a7f922f4ced6e2b1d09c331ff394d10f9e3536043ef2",
+        "overflow": false
+      },
+      {
+        "label": "思考-expanded",
+        "hash": "43d39c664896f0841b6d8518e42b95d83557e15c9dda5e423f234ee6bd5d9d16",
+        "overflow": false
+      },
+      {
+        "label": "路线图",
+        "hash": "ee0b4d460f413819581f2e2d849dda69a3a0cf69772679aa109bfc7644e09744",
+        "overflow": true
+      },
+      {
+        "label": "done-filter",
+        "hash": "ef794a335bf2520e2327e20b69d0b84979de438274c7b7bb153105b3ca6771f6",
+        "overflow": true
+      },
+      {
+        "label": "task-expanded",
+        "hash": "c1de1e1b2db045c61ca6497440457c7d8b83deed21cbf5dc547f3af3839f4657",
+        "overflow": true
+      },
+      {
+        "label": "search-empty",
+        "hash": "928d952406113f39ee866cd0873419e26f7246644e51838a80da0e2d226cf6e8",
+        "overflow": true
+      },
+      {
+        "label": "token-focus",
+        "hash": "6b016e7fa73642e58568d0aab422245b39f4831fcab3e3e9597bd12df1409f52",
+        "overflow": false
+      },
+      {
+        "label": "empty-总览",
+        "hash": "4153a636c839d75423ef24575b85fb849483d16d5969c754f47f8f5d3489f6d9",
+        "overflow": false
+      },
+      {
+        "label": "empty-记忆",
+        "hash": "42e9ecf64d3ca2208aeb67aae5933796cfdf4ded8d18092742d585d6ffef4520",
+        "overflow": false
+      },
+      {
+        "label": "empty-人物",
+        "hash": "be1db3eca914ea5ecdb72693e4b6e3f9659a432558c1d6cdea8ddb2502e2b1d3",
+        "overflow": false
+      },
+      {
+        "label": "empty-思考",
+        "hash": "dc9557029ac9957b70fd6b2098052fc7ef3e21d5ea642869971d28dda2aa20a6",
+        "overflow": false
+      },
+      {
+        "label": "empty-路线图",
+        "hash": "68429cfd7f916e0d2f90c5667578c5835376ce93c1ea2cb62de354ef06eb64cc",
+        "overflow": true
+      },
+      {
+        "label": "network-error",
+        "hash": "b13252cd8a25afeda79fc5b132fef8d13a1dd0e5bde2ac14a9ef2d0c0236c78c",
+        "overflow": true
+      },
+      {
+        "label": "clear-token",
+        "hash": "0889f155c65514f2c577e1617a861de110329eb463bc933963856fa848870b4c",
+        "overflow": false
+      }
+    ],
+    "csp": [
+      "style-src-attr",
+      "style-src-attr",
+      "style-src-attr",
+      "style-src-attr"
+    ]
+  },
+  {
+    "width": 390,
+    "states": [
+      {
+        "label": "no-token",
+        "hash": "c5187d5238b76bdbaf056daac1e7d6d9b4854ba5fa3fd266b860e27ccc16cfd0",
+        "overflow": false
+      },
+      {
+        "label": "401",
+        "hash": "0f9d996613896ae16582d6da3d58e3d773739b354f7ab9167209cc2a1fc1e2f5",
+        "overflow": false
+      },
+      {
+        "label": "overview",
+        "hash": "d5e9ae9a822fcd1d80f1dd200cf83412be21f994dacffb0e7144513ec55e7e70",
+        "overflow": false
+      },
+      {
+        "label": "记忆",
+        "hash": "087145f622c98eafba20c111db07099bf8dcbc1e22d5226413a30805117b8ed0",
+        "overflow": false
+      },
+      {
+        "label": "人物",
+        "hash": "375a3d20bf8117f12f2f584bebff44808c8aab2a19a0fc46bf5b0a5494e92c6d",
+        "overflow": false
+      },
+      {
+        "label": "人物-expanded",
+        "hash": "90b8bc1f85f581805153f694d29855e1e88c6936689433a427f99a6511440d66",
+        "overflow": false
+      },
+      {
+        "label": "思考",
+        "hash": "d13112fa103443a9893c2b5346c91190b383e8b1bf33f5ddfd3c8d611b0d2922",
+        "overflow": false
+      },
+      {
+        "label": "思考-expanded",
+        "hash": "ad5535dd22f63d019d98a41f73ab50419bd75a934efc923cca1003d59d9517a7",
+        "overflow": false
+      },
+      {
+        "label": "路线图",
+        "hash": "7994e45b459f9f4e06d5c1fb4e7b742624e94564a210267ca27f23ace8660771",
+        "overflow": false
+      },
+      {
+        "label": "done-filter",
+        "hash": "5f68aeaad437e2cf5979c35a5e7ca1d2e59133cc6ec5797566b999ef4a7425e3",
+        "overflow": false
+      },
+      {
+        "label": "task-expanded",
+        "hash": "bf7dd94af616a2a342f3a31c40a6832e3169ee0309a9880d367254c07b133902",
+        "overflow": false
+      },
+      {
+        "label": "search-empty",
+        "hash": "031d997b333c9baeb4d8a2cb7bc3437b273d23153b50eb708cddc2ac61fdc41c",
+        "overflow": false
+      },
+      {
+        "label": "token-focus",
+        "hash": "c3c3671dd19bed8095fd90663d9e0bc4cb3417ddd4bdf015a4f691c2e2e324b7",
+        "overflow": false
+      },
+      {
+        "label": "empty-总览",
+        "hash": "a98044c662f7499da543265cf1d36e396476f749ad30d112046ae6a96ec71cb7",
+        "overflow": false
+      },
+      {
+        "label": "empty-记忆",
+        "hash": "8004a8d4dd9e9fdd2fd5f98b1d03eb1c634e4b86c09616b4d107d69a8b607555",
+        "overflow": false
+      },
+      {
+        "label": "empty-人物",
+        "hash": "e9176ee4a3ee7560e160fd121e1a1a41733e39f6e9273c9b07d9d34f18d3d93e",
+        "overflow": false
+      },
+      {
+        "label": "empty-思考",
+        "hash": "1c68472986184f9ceffb5703b4cfa96b56a9b3af41e807e003df82224bb5e618",
+        "overflow": false
+      },
+      {
+        "label": "empty-路线图",
+        "hash": "54a98e15fffabe3210c0d2ac7f0e40a345d9bae0befb333904d1d5affc040d83",
+        "overflow": false
+      },
+      {
+        "label": "network-error",
+        "hash": "472927f4252811c7d0dd77c93ba93a54a6e1a6ed2351ba6d9a0ec77f4a48a3c1",
+        "overflow": false
+      },
+      {
+        "label": "clear-token",
+        "hash": "6c32462507abecfe89fb1fe349eb49f535c29a06272fc2fbc8d0f34715667fee",
+        "overflow": false
+      }
+    ],
+    "csp": [
+      "style-src-attr",
+      "style-src-attr",
+      "style-src-attr",
+      "style-src-attr"
+    ]
+  }
+]
