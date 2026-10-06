@@ -9,6 +9,8 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+.reports/
+/AGENTS.md
 # Secrets — ignore .env and variants like .env.prod / .env.local
 # but keep .env.example trackable as the single source of truth
 .env

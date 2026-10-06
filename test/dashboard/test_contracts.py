@@ -7,11 +7,11 @@ import sys
 import pytest
 
 
-@pytest.mark.parametrize("script", ["r5_contract.py", "routes.py"])
+@pytest.mark.parametrize("script", ["service_contract.py", "routes_contract.py"])
 def test_dashboard_contract_in_isolated_process(script):
     root = Path(__file__).resolve().parents[2]
     result = subprocess.run(
-        [sys.executable, "-B", str(root / "docs/refactor/records/dashboard/verification" / script)],
+        [sys.executable, "-B", str(Path(__file__).with_name(script))],
         cwd=root,
         env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         capture_output=True,
