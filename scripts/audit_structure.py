@@ -94,27 +94,25 @@ def scan(root: Path) -> dict:
 
 def markdown(report: dict) -> str:
     lines = [
-        "# 代码结构扫描报告", "", f"扫描时间（UTC）：{report['generated_at']}",
-        f"Git HEAD：`{report['head']}`", "",
-        "口径：Git 已跟踪文件和未忽略的新文件；检查当前工作区，不代表已提交版本。",
-        "统计物理行（包括空行、注释）；目录仅计算直属文件，不计算子目录或递归总量。",
-        "严格使用 >400 行、>10 个文件。依赖、构建产物、缓存、符号链接排除；敏感文件不读取正文。",
-        "二进制文件计入目录文件数，不参与行数检查。完整清单和跳过原因见 audit.json。", "",
-        f"共 {report['file_count']} 个文件，{report['text_file_count']} 个可扫描文本文件。",
-        f"发现 {len(report['oversized_files'])} 个大文件、{len(report['crowded_directories'])} 个拥挤目录。", "",
-        "## 超过 400 行的文件", "", "| 文件 | 当前行数 | HEAD 行数 |", "| --- | ---: | ---: |",
+        "# Structure audit", "", f"Generated (UTC): {report['generated_at']}",
+        f"HEAD: `{report['head']}`", "",
+        "Scope: tracked and nonignored working-tree files; physical lines and direct files only.",
+        "Limits: >400 lines or >10 direct files. Dependencies, caches and symlinks are excluded.",
+        "Binary files count toward directory limits; sensitive contents are not read.", "",
+        f"Files: {report['file_count']} ({report['text_file_count']} text).",
+        f"Hotspots: {len(report['oversized_files'])} files, {len(report['crowded_directories'])} directories.", "",
+        "## Oversized files", "", "| File | Lines | HEAD lines |", "| --- | ---: | ---: |",
     ]
     for item in report["oversized_files"]:
-        baseline = item["head_lines"] if item["head_lines"] is not None else "未跟踪"
+        baseline = item["head_lines"] if item["head_lines"] is not None else "untracked"
         lines.append(f"| `{item['path']}` | {item['lines']} | {baseline} |")
-    lines.extend(["", "## 超过 10 个直属文件的目录", "", "| 目录 | 文件数 |", "| --- | ---: |"])
+    lines.extend(["", "## Crowded directories", "", "| Directory | Files |", "| --- | ---: |"])
     for item in report["crowded_directories"]:
         lines.append(f"| `{item['path']}` | {item['files']} |")
     lines.extend([
-        "", "## 工作区状态", "",
-        f"共有 {len(report['working_tree'])} 条 Git 状态记录；完整状态、文件路径和跳过原因见 [audit.json](audit.json)。",
-        "状态清单用于识别未完成工作，不能据此认定改动已验证。", "",
-        "报告仅触发通知与方案讨论，不授权 Agent 自动拆分文件、回滚改动或创建远程 PR。", "",
+        "", f"Working-tree changes: {len(report['working_tree'])}.",
+        "With --write, audit.json contains the full inventory and exclusions.",
+        "Hotspots require a developer-approved refactor plan.", "",
     ])
     return "\n".join(lines)
 
@@ -123,16 +121,13 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--write", action="store_true", help="Write docs/refactor/audit.json and audit.md")
+    parser.add_argument("--write", action="store_true", help="Write .reports/structure/audit.json and audit.md")
     parser.add_argument("--check", action="store_true", help="Exit 1 when structural hotspots exist")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     if args.write:
-        destination = root / "docs" / "refactor"
+        destination = root / ".reports" / "structure"
         destination.mkdir(parents=True, exist_ok=True)
-        # Include the report files themselves in the directory-count snapshot.
-        for name in ("audit.json", "audit.md"):
-            (destination / name).touch(exist_ok=True)
     report = scan(root)
     if args.write:
         # Compact JSON keeps a machine-generated report from becoming a line-count hotspot.

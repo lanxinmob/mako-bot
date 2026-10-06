@@ -65,7 +65,6 @@
 每日鸟图首批两种，指定鸟名检索不限于这两种。鸟图注明物种、来源和授权；历史背景与虚构故事分开标注；期刊提供 Crossref
 记录和论文 DOI，没有可靠数据的分区、影响因子和版面费不填写。期刊主题检索
 用于发现相关刊物，最终仍需阅读刊物官网的范围和投稿要求。
-详细来源与限制见 [发现功能说明](docs/features/discoveries/implementation.md)。
 #### RAG（检索增强生成）
 - [x] 每天通过聊天记录建立或更新用户画像个人档案
 - [x] 茉子每日日记，记录有趣或重要事件
@@ -184,9 +183,3 @@ nb run
 - [nonebot_plugin-apscheduler](https://github.com/nonebot/plugin-apscheduler)
 - [nonebot_plugin_lagrange](https://github.com/Lonely-Sails/nonebot-plugin-lagrange)
 - [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
-
-## 开发与 Agent 协作
-
-项目结构见 [项目概览](docs/agent/project.md)，开发规范见 [开发指南](docs/agent/development.md)。
-Agent 开工前读取 [AGENTS.md](AGENTS.md)；按 >400 行 / 目录直属 >10 文件检测，重构由开发者确认。
-本次 A 基线重构的映射与验证分别见 [迁移说明](docs/refactor/migration.md) 和 [执行状态](docs/refactor/status.md)。
