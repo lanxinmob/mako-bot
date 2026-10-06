@@ -32,6 +32,7 @@ class ChatRequest:
     search_outcome: SearchOutcome = field(default_factory=SearchOutcome)
     history_snapshot: HistorySnapshot | None = None
     plugin_history: List[dict] = field(default_factory=list)
+    image_inputs: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

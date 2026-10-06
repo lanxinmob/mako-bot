@@ -15,6 +15,31 @@ from src.services.persistence.generation.store import GenerationStore
 logger = logging.getLogger(__name__)
 
 
+def message_text_length(message):
+    if not isinstance(message, dict):
+        raise ValueError("invalid generation message")
+    content = message.get("content")
+    if isinstance(content, str):
+        return len(content)
+    if not isinstance(content, list) or not content or message.get("role") != "user":
+        raise ValueError("invalid multimodal generation message")
+    count = 0
+    for part in content:
+        if not isinstance(part, dict):
+            raise ValueError("invalid generation content part")
+        if part.get("type") == "text" and isinstance(part.get("text"), str):
+            count += len(part["text"])
+        elif part.get("type") == "image_url" and isinstance(part.get("image_url"), dict):
+            url = part["image_url"].get("url")
+            if not isinstance(url, str) or not url.startswith(tuple(
+                    f"data:image/{kind};base64," for kind in ("jpeg", "png", "gif", "webp"))):
+                raise ValueError("generation image must be validated inline data")
+        else:
+            raise ValueError("unsupported generation content part")
+    # Image bytes are not text characters; keep the existing text estimate.
+    return count
+
+
 class GenerationNotAdmitted(RuntimeError):
     """Do not invoke a provider when the attempt was not durably admitted."""
 
@@ -47,12 +72,9 @@ class RecordedInvocation:
         # Copy before awaiting admission: caller mutation cannot alter this attempt.
         encoded = json.dumps(messages, ensure_ascii=False, sort_keys=True, allow_nan=False)
         frozen_messages = json.loads(encoded)
-        if not isinstance(frozen_messages, list) or any(
-            not isinstance(item, dict) or not isinstance(item.get("content"), str)
-            for item in frozen_messages
-        ):
-            raise ValueError("generation messages must contain text content")
-        input_chars = sum(len(item["content"]) for item in frozen_messages)
+        if not isinstance(frozen_messages, list):
+            raise ValueError("generation messages must be a list")
+        input_chars = sum(message_text_length(item) for item in frozen_messages)
         spec = GenerationSpec(
             secrets.token_hex(32), user_id, phase, model,
             hashlib.sha256(encoded.encode("utf-8")).hexdigest(),

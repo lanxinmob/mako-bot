@@ -116,6 +116,7 @@ async def execute(services, incoming, transport, tool_executor, rhythm):
             search_outcome=enriched.search_outcome,
             history_snapshot=history_snapshot,
             plugin_history=plugin_history,
+            image_inputs=getattr(enriched, "image_inputs", []),
         )
 
         input_chars = len(llm_text) + sum(
