@@ -1,9 +1,7 @@
-"""Bird identity, licensing, failure and stable date behavior without application env."""
+"""Bird identity, licensing, failure and successive selections without application env."""
 import asyncio
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
-import subprocess
-import sys
+from datetime import datetime
 
 import httpx
 import pytest
@@ -88,7 +86,7 @@ async def test_allowed_inaturalist_license_has_author_photo_and_license_links(co
     assert "https://www.inaturalist.org/photos/123" in reply.text
     assert "https://creativecommons.org/" in reply.text
     assert f"资料获取日期：{FETCHED}" in reply.text
-    assert "来源未提供经核对的辨认说明" in reply.text
+    assert "辨认线索" not in reply.text  # No invented field notes for unknown species.
 
 
 @pytest.mark.asyncio
@@ -201,51 +199,43 @@ async def test_malformed_data_preserves_daily_offline_image_and_named_failure(pa
     api = StubAPI(payload=payload, fetched=fetched)
     daily = await bird(api, user_id=7, now=NOW)
     assert daily.image_url in {item.photo.url for item in DAILY_BIRDS}
-    assert "同种已核对的离线资料" in daily.text and "离线核对日期：2026-10-06" in daily.text
+    assert "已核对的离线鸟册" in daily.text and "离线核对日期：2026-10-06" in daily.text
     assert (await bird(api, "Turdus merula", now=NOW)).image_url is None
 
 
 @pytest.mark.asyncio
-async def test_every_daily_card_has_the_selected_species_picture_online_or_offline():
-    selected = set()
-    for user_id in range(16):
-        failed_api = StubAPI(error=True)
-        offline = await bird(failed_api, user_id=user_id, now=NOW)
-        name = failed_api.calls[0][1]["q"]
-        item = next(record for record in DAILY_BIRDS if record.name == name)
-        selected.add(name)
-        api = StubAPI([taxon(item.name, item.taxon_id, item.chinese_name,
-                            default_photo=photo("cc-by-nc"))])
-        online = await bird(api, user_id=user_id, now=NOW)
-        assert offline.image_url == online.image_url == item.photo.url
-        assert item.name in offline.text and item.name in online.text
-    assert selected == {item.name for item in DAILY_BIRDS}
+async def test_offline_birds_alternate_with_matching_species_photos():
+    api = StubAPI(error=True)
+    replies = [await bird(api, user_id=706, now=NOW) for _ in range(6)]
+    for reply in replies:
+        item = next(item for item in DAILY_BIRDS if item.name in reply.text)
+        assert reply.image_url == item.photo.url
+    assert all(a.image_url != b.image_url for a, b in zip(replies, replies[1:]))
 
 
 @pytest.mark.asyncio
-async def test_beijing_day_selection_is_stable_across_times_and_processes():
-    api = StubAPI(error=True)
-    before = datetime(2026, 10, 5, 15, 59, tzinfo=timezone.utc)
-    after = before + timedelta(minutes=1)
-    for user_id in range(12):
-        assert await bird(api, user_id=user_id, now=before) == await bird(
-            api, user_id=user_id, now=datetime(2026, 10, 5, 23, 59))
-        assert await bird(api, user_id=user_id, now=after) == await bird(
-            api, user_id=user_id, now=datetime(2026, 10, 6, 0))
-    first = await bird(api, user_id=7, now=NOW)
-    assert first == await bird(api, user_id=7, now=NOW + timedelta(hours=8))
-    script = (
-        "import asyncio; from datetime import datetime; "
-        "from src.features.discoveries.birds import bird; "
-        "from src.features.discoveries.network import LookupUnavailable; "
-        "exec('class API:\\n async def get(self,*a,**kw): raise LookupUnavailable()'); "
-        "print(asyncio.run(bird(API(),user_id=7,now=datetime(2026,10,6,12))).image_url)"
-    )
-    output = subprocess.check_output([sys.executable, "-B", "-c", script], text=True)
-    assert output.strip() == first.image_url
-    changed = [(await bird(api, user_id=i, now=before)).image_url !=
-               (await bird(api, user_id=i, now=after)).image_url for i in range(12)]
-    assert any(changed)
+async def test_online_pool_cycles_without_repeats_at_the_same_time():
+    records = [taxon(name, i + 100, default_photo=photo(id=i + 200,
+               medium_url=f"https://static.inaturalist.org/photos/{i + 200}/medium.jpg"))
+               for i, name in enumerate(("Turdus merula", "Oriolus oriolus", "Pica pica"))]
+    api = StubAPI(records + [taxon("Invalid bird", 999, default_photo=photo("cc-by-nc"))])
+    replies = [await bird(api, user_id=707, now=NOW) for _ in range(9)]
+    for start in range(0, 9, 3):
+        assert len({r.image_url for r in replies[start:start + 3]}) == 3
+    assert all(a.image_url != b.image_url for a, b in zip(replies, replies[1:]))
+    for reply in replies:
+        selected = next(t for t in records if t["name"] in reply.text)
+        assert reply.image_url == selected["default_photo"]["medium_url"]
+    assert all(call[1]["taxon_id"] == 3 and call[1]["per_page"] == 100 for call in api.calls)
+    assert "Invalid bird" not in "".join(r.text for r in replies)
+
+
+@pytest.mark.asyncio
+async def test_named_queries_remain_exact_and_do_not_draw_random_species():
+    api = StubAPI([taxon(default_photo=photo())])
+    first = await bird(api, "Turdus merula", user_id=708, now=NOW)
+    assert await bird(api, "Turdus merula", user_id=708, now=NOW) == first
+    assert api.calls[0][1]["q"] == "Turdus merula"
 
 
 @pytest.mark.asyncio

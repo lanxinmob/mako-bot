@@ -52,10 +52,10 @@ class MessageBuilder:
         )
         try:
             profile = self.storage.get_profile(request.user_id) or {}
+            profile_text = profile.get("profile_text") or "暂无已保存的档案；不能据此断言是初次认识。"
         except Exception as exc:
             logger.warning(f"用户画像读取失败，已使用空画像: {exc}")
-            profile = {}
-        profile_text = profile.get("profile_text") or "这是首次认识。"
+            profile_text = "档案暂时读取失败；不要把记忆不可用说成不认识对方。"
         try:
             knowledge = [
                 item
@@ -91,6 +91,11 @@ class MessageBuilder:
 
 用户画像：
 {profile_text}
+
+记忆使用：用户画像与茉子的角色档案分开使用。
+对方问“我是谁”“还记得我吗”时，先回应对方，选一两条档案或有效关系记忆中的具体线索；不要回答成茉子的自我介绍。
+平时用记忆调整称呼、语气和话题，不必每次复述档案。没有证据的共同经历不编造，记忆不足时坦率说明。
+当前有效关系记忆中的纠正优先于旧档案；档案只是过往观察，不是永远不变的标签。
 
 长期记忆：
 {knowledge_text}

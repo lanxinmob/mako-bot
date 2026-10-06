@@ -1,23 +1,17 @@
 """Offline historical backgrounds with clearly separated original fiction."""
 
-from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from hashlib import sha256
-from random import SystemRandom
+from datetime import datetime
 import re
 from unicodedata import normalize
 
 from .models import DiscoveryReply
+from .selection import ChoiceCycle
 
 __all__ = ["journey"]
 
 _CHECKED_ON = "2026-10-06"
-_BEIJING = timezone(timedelta(hours=8))
-_RANDOM = SystemRandom()
-# Only a bounded, ephemeral anti-repeat hint; never changes the daily selection.
-_LAST: OrderedDict[tuple[int, date], str] = OrderedDict()
-_LAST_LIMIT = 256
+_CHOICES = ChoiceCycle()
 
 
 @dataclass(frozen=True)
@@ -141,19 +135,6 @@ _JOURNEYS = (
 )
 
 
-def _day(now: datetime | None) -> date:
-    moment = now if now is not None else datetime.now(_BEIJING)
-    # Naive injected times mean Beijing local time, independent of host timezone.
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=_BEIJING)
-    return moment.astimezone(_BEIJING).date()
-
-
-def _daily(candidates: tuple[_Journey, ...], user_id: int, day: date) -> _Journey:
-    digest = sha256(f"journey-v1:{user_id}:{day.isoformat()}".encode("utf-8")).digest()
-    return candidates[int.from_bytes(digest, "big") % len(candidates)]
-
-
 def _matches(item: _Journey, query: str) -> bool:
     # Every part must be a supported keyword: 中国唐朝 works; 中国火星 does not.
     remainder = re.sub(r"[\s,，、/·]+", "", query)
@@ -168,12 +149,10 @@ def _render(item: _Journey) -> DiscoveryReply:
     if item.approximate:
         year = "约" + year
     text = (
-        f"🧭 传送｜{item.title}\n"
-        f"故事落点（虚构设定）：{year} · {item.era} · {item.place}\n"
-        f"史实背景：{item.backdrop}\n"
-        f"原创虚构（人物与情节）：{item.story}\n"
-        "发送“传送 再来”可换一站，也可指定地区或时代。\n"
-        f"来源（仅支持史实背景；核对{_CHECKED_ON}）：\n"
+        f"🧭 睁开眼，你到了……\n{year} · {item.era}\n{item.place}\n\n"
+        f"「{item.title}」\n小故事（虚构）：{item.story}\n\n"
+        f"历史背景：{item.backdrop}\n"
+        f"背景出处（核对{_CHECKED_ON}）：\n"
     )
     text += "\n".join(f"{source.title}：{source.url}" for source in item.sources)
     return DiscoveryReply(text=text)
@@ -182,24 +161,17 @@ def _render(item: _Journey) -> DiscoveryReply:
 def journey(
     query: str = "", *, user_id: int = 0, now: datetime | None = None
 ) -> DiscoveryReply:
-    """Choose a brief card; daily picks use Beijing dates and no persistent state."""
+    """Draw a new story, optionally filtered by region or era."""
     query = normalize("NFKC", query).strip()
-    day = _day(now)
-    key = (user_id, day)
     if query == "再来":
-        previous = _LAST.get(key, _daily(_JOURNEYS, user_id, day).key)
-        selected = _RANDOM.choice(tuple(item for item in _JOURNEYS if item.key != previous))
-    else:
-        candidates = tuple(item for item in _JOURNEYS if not query or _matches(item, query))
-        if not candidates:
-            return DiscoveryReply(
-                text="还没有符合这些关键词的故事。可选：两河流域、埃及、庞贝、唐代长安、"
-                "北宋汴京、日本江户、英国伦敦、美国犹他。也可用：中国、古代、近代、"
-                "公元前、十九世纪；组合示例：传送 中国 唐代。发送“传送 再来”可随机换一站。"
-            )
-        selected = _daily(candidates, user_id, day)
-    _LAST[key] = selected.key
-    _LAST.move_to_end(key)
-    if len(_LAST) > _LAST_LIMIT:
-        _LAST.popitem(last=False)
+        query = ""
+    candidates = tuple(item for item in _JOURNEYS if not query or _matches(item, query))
+    if not candidates:
+        return DiscoveryReply(
+            text="还没有符合这些关键词的故事。可选：两河流域、埃及、庞贝、唐代长安、"
+            "北宋汴京、日本江户、英国伦敦、美国犹他。也可用：中国、古代、近代、"
+            "公元前、十九世纪；组合示例：传送 中国 唐代。发送“传送 再来”可随机换一站。"
+        )
+    key = _CHOICES.choose(user_id, tuple(item.key for item in candidates))
+    selected = next(item for item in candidates if item.key == key)
     return _render(selected)

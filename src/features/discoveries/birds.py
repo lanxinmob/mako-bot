@@ -1,31 +1,22 @@
 """Bird discovery with explicit species matching and reusable image provenance."""
-from datetime import date, datetime, timedelta, timezone
-import hashlib
+from datetime import date, datetime
 import re
 from urllib.parse import urlsplit, urlunsplit
 
 from .bird_catalog import BirdPhoto, BirdRecord, DAILY_BIRDS, VERIFIED_DAY
 from .models import DiscoveryReply, clean, image_url
 from .network import LookupUnavailable, PublicAPI
+from .selection import ChoiceCycle
 
 
 TAXA_URL = "https://api.inaturalist.org/v1/taxa"
-BEIJING = timezone(timedelta(hours=8))
+_CHOICES = ChoiceCycle()
 LICENSES = {
     "cc0": ("CC0 1.0", "https://creativecommons.org/publicdomain/zero/1.0/"),
     "cc-by": ("CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"),
     "cc-by-sa": ("CC BY-SA 4.0", "https://creativecommons.org/licenses/by-sa/4.0/"),
 }
 SCIENTIFIC_NAME = re.compile(r"[A-Z][a-z]+ [a-z][a-z-]+")
-
-
-def _daily_record(user_id: int, now: datetime | None) -> tuple[BirdRecord, str]:
-    current = now if now is not None else datetime.now(BEIJING)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=BEIJING)
-    day = current.astimezone(BEIJING).date().isoformat()
-    seed = hashlib.sha256(f"birds:{day}:{user_id}".encode("utf-8")).digest()
-    return DAILY_BIRDS[int.from_bytes(seed[:8], "big") % len(DAILY_BIRDS)], day
 
 
 def _record(name: str) -> BirdRecord | None:
@@ -51,11 +42,11 @@ def _valid_taxon(taxon) -> bool:
     return True
 
 
-def _candidates(payload) -> list[dict]:
+def _candidates(payload, *, limit=20) -> list[dict]:
     if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
         raise LookupUnavailable("物种来源返回了无法核对的资料")
     candidates, seen = [], {}
-    for taxon in payload["results"][:20]:
+    for taxon in payload["results"][:limit]:
         if not _valid_taxon(taxon):
             continue
         previous = seen.get(taxon["id"])
@@ -167,13 +158,10 @@ def _photo(taxon: dict) -> BirdPhoto | None:
 
 def _render(taxon: dict, fetched_day: str, *, title: str, offline=False) -> DiscoveryReply:
     chinese = _chinese_name(taxon)
-    lines = [title, f"{chinese or '中文名：来源未提供'} · {taxon['name']}",
-             "分类：鸟纲 Aves · 种 species"]
+    lines = [title, f"{chinese + ' · ' if chinese else ''}{taxon['name']}", ""]
     known = _record(taxon["name"])
     if known is not None:
         lines.extend((known.note, f"科普来源（核对 {VERIFIED_DAY}）：{known.source}"))
-    else:
-        lines.append("来源未提供经核对的辨认说明，更多资料请查看下方物种来源。")
     lines.append(f"物种来源：https://www.inaturalist.org/taxa/{taxon['id']}")
     wiki = _wiki_source(taxon.get("wikipedia_url"))
     if wiki is not None:
@@ -189,15 +177,17 @@ def _render(taxon: dict, fetched_day: str, *, title: str, offline=False) -> Disc
         return DiscoveryReply("\n".join(lines))
     lines.extend((f"图片作者：{photo.author}；许可：{photo.license_name}",
                   f"许可链接：{photo.license_url}", f"图片来源：{photo.source}",
-                  "使用来源缩略图，未另行裁剪或改绘。"))
+                  "原图缩略图，未改绘。"))
     return DiscoveryReply("\n".join(lines), url)
 
 
-def _offline(record: BirdRecord, day: str) -> DiscoveryReply:
+def _offline(user_id: int) -> DiscoveryReply:
+    name = _CHOICES.choose(user_id, tuple(item.name for item in DAILY_BIRDS))
+    record = next(item for item in DAILY_BIRDS if item.name == name)
     taxon = {"id": record.taxon_id, "name": record.name,
              "rank": "species", "iconic_taxon_name": "Aves"}
     return _render(taxon, VERIFIED_DAY,
-                   title=f"今日小鸟 · {day}\n网络资料暂不可核对，使用同种已核对的离线资料。",
+                   title="🐦 这回遇见它\n在线鸟册暂不可用，先翻翻已核对的离线鸟册。",
                    offline=True)
 
 
@@ -215,35 +205,43 @@ def _candidate_reply(candidates: list[dict], fetched_day: str, *, more=False) ->
 
 async def bird(api: PublicAPI, query: str = "", *, user_id: int = 0,
                now: datetime | None = None) -> DiscoveryReply:
-    """Resolve an explicit bird name, or a stable daily bird with a verified image."""
+    """Resolve an explicit name, or draw a new bird with a verified image."""
     if not isinstance(query, str) or len(query) > 100:
         return DiscoveryReply("请提供不超过 100 字的中文鸟名或完整学名。")
     query = " ".join(query.split())
-    daily, day = _daily_record(user_id, now)
     known = next((item for item in DAILY_BIRDS if query == item.chinese_name), None)
-    search = daily.name if not query else known.name if known is not None else query
+    search = known.name if known is not None else query
+    params = {"rank": "species", "locale": "zh-CN"}
+    if query:
+        params.update(q=search, iconic_taxa="Aves", per_page=20)
+    else:
+        params.update(taxon_id=3, per_page=100)
     try:
-        payload, fetched_day = await api.get(TAXA_URL, {
-            "q": search, "rank": "species", "iconic_taxa": "Aves",
-            "locale": "zh-CN", "per_page": 20,
-        })
+        payload, fetched_day = await api.get(TAXA_URL, params)
         if not isinstance(fetched_day, str) or date.fromisoformat(fetched_day).isoformat() != fetched_day:
             raise LookupUnavailable("资料获取日期无法核对")
-        candidates = _candidates(payload)
+        candidates = _candidates(payload, limit=20 if query else 100)
     except (LookupUnavailable, ValueError):
         if not query:
-            return _offline(daily, day)
+            return _offline(user_id)
         return DiscoveryReply("鸟种资料来源暂不可用，未能核对这次查询。请稍后用原鸟名或完整学名再查。")
+    if not query:
+        pictured = [taxon for taxon in candidates if _photo(taxon) is not None]
+        # Conflicting scientific identities cannot be selected as a random card.
+        names = [taxon["name"] for taxon in pictured]
+        pictured = [taxon for taxon in pictured if names.count(taxon["name"]) == 1]
+        if not pictured:
+            return _offline(user_id)
+        name = _CHOICES.choose(user_id, tuple(taxon["name"] for taxon in pictured))
+        selected = next(taxon for taxon in pictured if taxon["name"] == name)
+        return _render(selected, fetched_day, title="🐦 这回遇见它")
     exact = [taxon for taxon in candidates if _matching(taxon, search)]
     # Scientific names may have unrelated fuzzy hits; common-name ambiguity stays explicit.
     scientific = bool(re.fullmatch(r"[A-Za-z]+ [A-Za-z][A-Za-z-]+", search))
     total = payload.get("total_results")
     more = type(total) is int and total > len(payload["results"])
     if len(exact) == 1 and (scientific or (len(candidates) == 1 and not more)):
-        title = f"今日小鸟 · {day}" if not query else "小鸟查询"
-        return _render(exact[0], fetched_day, title=title)
-    if not query:
-        return _offline(daily, day)
+        return _render(exact[0], fetched_day, title="🐦 找到它了")
     if candidates:
         return _candidate_reply(candidates, fetched_day, more=more)
     return DiscoveryReply("没有找到可核对的鸟纲种级物种，请检查中文名或完整学名；本次未替换成其他鸟。")

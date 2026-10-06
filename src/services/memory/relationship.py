@@ -39,7 +39,6 @@ class RelationshipService:
         created = [memory for memory in created if memory.memory_id not in existing_ids]
 
         if created:
-            self._sync_profile(user_id=user_id, nickname=nickname)
             for memory in created:
                 self._sync_note(memory)
             self._append_progress_event(
@@ -134,7 +133,6 @@ class RelationshipService:
         if not updated:
             return None
         self._update_mirror_note(updated)
-        self._sync_profile(user_id, nickname)
         self._append_progress_event(
             "relationship_memory_corrected",
             "用户纠正了自己的关系记忆。",
@@ -147,7 +145,6 @@ class RelationshipService:
         if not deleted:
             return False
         self.storage.delete_note(user_id, memory_id)
-        self._sync_profile(user_id, nickname)
         self._append_progress_event(
             "relationship_memory_deleted",
             "用户删除了自己的关系记忆。",
@@ -258,27 +255,6 @@ class RelationshipService:
             self.storage.update_note(memory.user_id, notes[0].note_id, memory.content)
             return
         self._sync_note(memory)
-
-    def _sync_profile(self, user_id: int, nickname: str) -> None:
-        prefs = self.storage.list_relationship_memories(
-            user_id, memory_type="preference", status="active", limit=3
-        )
-        taboos = self.storage.list_relationship_memories(
-            user_id, memory_type="taboo", status="active", limit=3
-        )
-        events = self.storage.list_relationship_memories(
-            user_id, memory_type="event", status="active", limit=2
-        )
-        profile_lines: List[str] = [f"称呼偏好: {nickname}"]
-        profile_lines.append(f"关系阶段: {self.relationship_stage(user_id)}")
-        if prefs:
-            profile_lines.append("偏好: " + "；".join([m.content for m in prefs]))
-        if taboos:
-            profile_lines.append("禁忌: " + "；".join([m.content for m in taboos]))
-        if events:
-            profile_lines.append("近期事件: " + "；".join([m.content for m in events]))
-        profile_lines.append(f"最后更新: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-        self.storage.set_profile(user_id, nickname, "\n".join(profile_lines))
 
     def _extract_preferences(self, user_id: int, text: str) -> List[RelationshipMemory]:
         patterns = [
