@@ -40,6 +40,10 @@ def test_real_registration_and_message_boundaries(plugin):
     assert plugin.command_for(Event(MessageSegment.at(99) + "小鸟"), bot) is None
     assert plugin.command_for(Event(MessageSegment.image("https://example.com/a") + "小鸟"), bot) is None
     assert plugin.command_for(Event(MessageSegment.at(42) + " 小鸟"), bot).kind == "bird"
+    assert plugin.command_for(Event("/help"), bot).kind == "help"
+    assert plugin.command_for(Event(MessageSegment.at(42) + " /help"), bot).kind == "help"
+    assert plugin.command_for(Event(MessageSegment.at(99) + " /help"), bot) is None
+    assert plugin.command_for(Event("发现帮助"), bot) is None
     event = Event("小鸟")
     event.user_id = 42
     assert plugin.command_for(event, bot) is None

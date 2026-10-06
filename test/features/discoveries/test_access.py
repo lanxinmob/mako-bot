@@ -87,7 +87,7 @@ def runtime(plugin, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("private", [False, True])
 @pytest.mark.parametrize("command,tool", [
-    ("小鸟", "bird"), ("传送", "journey"), ("发表", "journal"), ("发现帮助", "help"),
+    ("小鸟", "bird"), ("传送", "journey"), ("发表", "journal"), ("/help", "help"),
 ])
 async def test_global_disabled_tools_never_fetch_send_or_fall_back(runtime, private, command, tool):
     runtime.settings.tool_disable_list = "discoveries." + tool

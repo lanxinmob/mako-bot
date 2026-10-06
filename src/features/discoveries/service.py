@@ -31,16 +31,16 @@ def parse_command(text: str, nicknames=("茉子", "mako")) -> Command | None:
         if text.casefold().startswith(nickname.casefold()):
             text = text[len(nickname):].lstrip(" \t,，:：")
             break
+    if text == "/help":
+        return Command("help")
     if text.startswith(("/", ".")):
         text = text[1:]
-    match = re.fullmatch(r"(小鸟|今日小鸟|传送|期刊|发表|投稿|发现帮助)(?:[ \t]+([^\r\n]{1,100}))?", text)
+    match = re.fullmatch(r"(小鸟|今日小鸟|传送|期刊|发表|投稿)(?:[ \t]+([^\r\n]{1,100}))?", text)
     if match is None:
         return None
     name, argument = match.groups()
-    if name == "发现帮助" and argument:
-        return None
     kind = {"小鸟": "bird", "今日小鸟": "bird", "传送": "journey",
-            "期刊": "journal", "发表": "suggest", "投稿": "suggest", "发现帮助": "help"}[name]
+            "期刊": "journal", "发表": "suggest", "投稿": "suggest"}[name]
     return Command(kind, (argument or "").strip())
 
 

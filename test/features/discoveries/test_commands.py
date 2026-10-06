@@ -22,3 +22,10 @@ def test_only_duplicate_invocations_are_silenced():
     assert gate.admit(("bot", "group", 1, 8), bird)
     now[0] = 3
     assert gate.admit(key, bird)
+
+
+def test_help_requires_slash_and_does_not_claim_other_help_messages():
+    for text in ("/help", "茉子 /help", "mako /help"):
+        assert parse_command(text) == Command("help")
+    for text in ("帮助", "发现帮助", "/发现帮助", "help", ".help", "/help extra", "/help\n小鸟"):
+        assert parse_command(text) is None
