@@ -4,19 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import random
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from nonebot import get_bot, on_command
-from nonebot.adapters.onebot.v11 import Message, MessageSegment
+from nonebot.adapters.onebot.v11 import Message, MessageSegment, MessageEvent
 from nonebot.log import logger
 from nonebot.matcher import Matcher
 from nonebot_plugin_apscheduler import scheduler
 
 from src.core.config import get_settings
-from src.models.schemas import ChatRecord
-from src.services.news import fetch_juejin, fetch_tianxin, yesterday
-from src.services.outbound_dedup import OutboundDedupService
-from src.services.storage import StorageService
+from src.services.information.news import fetch_juejin
+from src.services.information.news import fetch_tianxin
+from src.services.information.news import yesterday
+from src.services.delivery.dedup import OutboundDedupService
+from src.services.persistence import StorageService
+from src.services.delivery.dispatcher import send_to_event, send_notice
+from src.services.delivery.periodic import PeriodicDelivery
 
 
 _storage = StorageService()
@@ -38,40 +41,20 @@ async def _send_scheduled_group_message(
     *,
     intent: str,
     source: str,
+    period: date | None = None,
+    fingerprints: list[str] | None = None,
 ) -> bool:
     if not group_id:
         logger.warning("定时消息未发送：DEFAULT_GROUP_ID 未配置 source={}", source)
         return False
-    content = _plain_text(message)
-    decision = await asyncio.to_thread(
-        _outbound_dedup.check,
-        target_type="group",
-        target_id=group_id,
-        intent=intent,
-        content=content,
+    if isinstance(message, Message) and any(segment.type != "text" for segment in message):
+        raise ValueError("定期文本消息不能隐式丢弃非文本消息段")
+    planned = period or datetime.now(scheduler.timezone).date()
+    client = await asyncio.to_thread(lambda: _storage.redis)
+    return await PeriodicDelivery(client, _storage, _outbound_dedup).deliver(
+        bot, group_id, _plain_text(message), task=source, period=planned,
+        timezone=scheduler.timezone, intent=intent, fingerprints=fingerprints or [],
     )
-    if not decision.allowed:
-        logger.info(
-            "跳过相似定时消息 group={} intent={} similarity={:.3f}",
-            group_id,
-            intent,
-            decision.similarity,
-        )
-        return False
-    await bot.send_group_msg(group_id=group_id, message=message)
-    await asyncio.to_thread(
-        _outbound_dedup.record,
-        target_type="group",
-        target_id=group_id,
-        intent=intent,
-        content=content,
-        source=source,
-    )
-    await asyncio.to_thread(
-        _storage.append_global_record,
-        ChatRecord(role="assistant", content=content, group_id=group_id, time=datetime.now()),
-    )
-    return True
 
 
 async def _fetch_digest_sections(
@@ -140,6 +123,7 @@ def _digest_fingerprints(sections: list[tuple[str, list[dict]]]) -> list[str]:
 
 @scheduler.scheduled_job("cron", hour=7, minute=0, id="mako_good_morning")
 async def good_morning_mako() -> None:
+    period = datetime.now(scheduler.timezone).date()
     choices = [
         "早上好哦，各位！今天也是元气满满的一天~",
         "早上好！新的一天也要好好照顾自己哦。",
@@ -153,6 +137,7 @@ async def good_morning_mako() -> None:
             random.choice(choices),
             intent="greeting",
             source="scheduler.good_morning",
+            period=period,
         )
     except Exception:
         logger.exception("早安消息发送失败")
@@ -160,34 +145,40 @@ async def good_morning_mako() -> None:
 
 @scheduler.scheduled_job("cron", hour=7, minute=10, id="mako_daily_digest")
 async def send_daily_digest() -> None:
+    period = datetime.now(scheduler.timezone).date()
     try:
-        digest_date, sections = await _fetch_digest_sections()
+        digest_date, sections = await _fetch_digest_sections(target_date=period - timedelta(days=1))
         message = _render_digest(digest_date, sections)
-        sent = await _send_scheduled_group_message(
+        await _send_scheduled_group_message(
             get_bot(),
             get_settings().default_group_id,
             message,
             intent="daily_digest",
             source="scheduler.daily_digest",
+            period=period,
+            fingerprints=_digest_fingerprints(sections),
         )
-        if sent:
-            await asyncio.to_thread(_storage.record_sent_news, _digest_fingerprints(sections))
     except Exception:
         logger.exception("每日资讯发送失败")
 
 
 @daily_news_matcher.handle()
-async def handle_daily_news(matcher: Matcher) -> None:
-    await matcher.send("茉子正在搜集最新资讯，请稍等片刻哦……")
+async def handle_daily_news(matcher: Matcher, event: MessageEvent) -> None:
+    await send_notice(matcher, event, "茉子正在搜集最新资讯，请稍等片刻哦……",
+                      notice_key="news.loading")
     try:
         digest_date, sections = await _fetch_digest_sections()
-        await matcher.send(_render_digest(digest_date, sections))
-        await asyncio.to_thread(_storage.record_sent_news, _digest_fingerprints(sections))
+        if await send_to_event(matcher, event, _render_digest(digest_date, sections)):
+            try:
+                await asyncio.to_thread(_storage.record_sent_news, _digest_fingerprints(sections))
+            except Exception:
+                logger.warning("手动资讯已送达，文章指纹补记未确认；不重发消息")
     except Exception:
         logger.exception("手动资讯查询失败")
-        await matcher.send("资讯服务暂时不可用，请稍后再试。")
+        await send_notice(matcher, event, "资讯服务暂时不可用，请稍后再试。",
+                          notice_key="news.unavailable")
 
 
 @bilibili_matcher.handle()
-async def handle_bilibili(matcher: Matcher) -> None:
-    await matcher.send("这是 Bilibili：\nhttps://www.bilibili.com/")
+async def handle_bilibili(matcher: Matcher, event: MessageEvent) -> None:
+    await send_to_event(matcher, event, "这是 Bilibili：\nhttps://www.bilibili.com/")

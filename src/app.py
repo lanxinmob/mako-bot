@@ -22,6 +22,8 @@ def bootstrap_application():
     nonebot.init()
     driver = nonebot.get_driver()
     driver.register_adapter(OneBotV11Adapter)
+    from src.services.tools.media_cleanup import cleanup_manager
+    driver.on_shutdown(cleanup_manager.shutdown)
     load_application_plugins()
     _bootstrapped = True
     return driver

@@ -1,0 +1,251 @@
+from __future__ import annotations
+
+import asyncio
+import warnings
+from io import BytesIO
+from typing import Optional, Tuple
+
+import httpx
+from nonebot.log import logger
+from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
+
+from src.core.config import get_settings
+from src.core.errors import ImageTooLargeError, NotConfiguredError
+from src.services.integrations.gemini import describe_image_with_gemini
+from src.services.integrations.gemini import has_gemini
+from src.services.integrations.llm import get_openai_client
+from src.services.integrations.llm import get_qwen_client
+from src.services.integrations.llm import has_openai
+from src.services.integrations.llm import has_qwen
+from src.services.retrieval.client import validate_public_url
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
+
+
+def _detect_mime(image_bytes: bytes) -> str:
+    """Detect common image types without the removed stdlib ``imghdr`` module."""
+
+    if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if image_bytes.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if image_bytes.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if (
+        len(image_bytes) >= 12
+        and image_bytes.startswith(b"RIFF")
+        and image_bytes[8:12] == b"WEBP"
+    ):
+        return "image/webp"
+    return "application/octet-stream"
+
+
+async def download_image_data(url: str, max_size: Optional[int] = None) -> tuple[bytes, str]:
+    settings = get_settings()
+    max_bytes = max_size if max_size is not None else settings.image_max_download_bytes
+    timeout = settings.image_download_timeout
+    headers = {"User-Agent": USER_AGENT}
+    safe_url = await validate_public_url(url)
+    # Redirects are deliberately disabled: every redirect target would need a
+    # fresh DNS/IP validation to preserve the SSRF boundary.
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        # HEAD-first: check Content-Length before downloading the body
+        head_resp = await client.head(safe_url, headers=headers)
+        content_length = head_resp.headers.get("content-length")
+        if content_length:
+            cl = int(content_length)
+            if cl > max_bytes:
+                raise ImageTooLargeError(
+                    f"Image too large: Content-Length={cl} bytes exceeds limit of {max_bytes} bytes"
+                )
+        resp = await client.get(safe_url, headers=headers)
+        resp.raise_for_status()
+        # Stream-read with manual truncation to avoid buffering over-limit data
+        content = bytearray()
+        async for chunk in resp.aiter_bytes(chunk_size=65536):
+            content.extend(chunk)
+            if len(content) > max_bytes:
+                raise ImageTooLargeError(
+                    f"Image too large: downloaded {len(content)} bytes exceeds limit of {max_bytes} bytes"
+                )
+        header_mime = resp.headers.get("content-type", "").split(";")[0].strip()
+        result = bytes(content)
+        mime = header_mime if header_mime.startswith("image/") else _detect_mime(result)
+        return result, mime
+
+
+async def download_image_bytes(url: str, max_size: Optional[int] = None) -> bytes:
+    content, _ = await download_image_data(url, max_size=max_size)
+    return content
+
+
+async def _describe_image_with_compatible_chat(
+    *,
+    client,
+    model: str,
+    image_url: str,
+    prompt: str = "请用简洁中文描述这张图片的内容。",
+) -> str:
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ],
+        max_tokens=512,
+    )
+    return (response.choices[0].message.content or "").strip()
+
+
+async def describe_image_url(image_url: str) -> str:
+    settings = get_settings()
+
+    if settings.image_provider == "qwen":
+        if not has_qwen():
+            raise NotConfiguredError("IMAGE_PROVIDER=qwen but DASHSCOPE_API_KEY or QWEN_API_KEY is missing.")
+        return await _describe_image_with_compatible_chat(
+            client=get_qwen_client(),
+            model=settings.qwen_vision_model,
+            image_url=image_url,
+        )
+
+    # Prefer Gemini for non-text when explicitly requested.
+    if settings.image_provider == "gemini":
+        if not has_gemini():
+            raise NotConfiguredError("IMAGE_PROVIDER=gemini but GEMINI_API_KEY is missing.")
+        image_bytes, mime_type = await download_image_data(image_url)
+        return await describe_image_with_gemini(image_bytes, mime_type)
+
+    # OpenAI route.
+    if has_openai():
+        return await _describe_image_with_compatible_chat(
+            client=get_openai_client(),
+            model=settings.vision_model,
+            image_url=image_url,
+        )
+
+    if has_qwen():
+        return await _describe_image_with_compatible_chat(
+            client=get_qwen_client(),
+            model=settings.qwen_vision_model,
+            image_url=image_url,
+        )
+
+    # Gemini fallback if OpenAI is unavailable.
+    if has_gemini():
+        image_bytes, mime_type = await download_image_data(image_url)
+        return await describe_image_with_gemini(image_bytes, mime_type)
+
+    raise NotConfiguredError("No multimodal provider configured.")
+
+
+async def generate_image(prompt: str) -> str:
+    settings = get_settings()
+    if not has_openai():
+        raise NotConfiguredError("OPENAI_API_KEY is not configured.")
+    client = get_openai_client()
+    response = await client.images.generate(
+        model=settings.image_model,
+        prompt=prompt,
+        size=settings.image_size,
+    )
+    return response.data[0].url
+
+
+def _parse_resize_value(value: str) -> Tuple[Optional[int], Optional[int]]:
+    cleaned = value.strip().lower().replace("*", "x")
+    if "x" in cleaned:
+        parts = [part for part in cleaned.split("x") if part]
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            return int(parts[0]), int(parts[1])
+        return None, None
+    if cleaned.isdigit():
+        return int(cleaned), None
+    return None, None
+
+
+def _validate_pil_dimensions(image: Image.Image) -> None:
+    """Reject images that exceed configured dimension/pixel limits BEFORE loading pixel data."""
+    settings = get_settings()
+    width, height = image.size
+    if width > settings.image_max_width or height > settings.image_max_height:
+        raise ImageTooLargeError(
+            f"Image dimensions {width}x{height} exceed limit "
+            f"{settings.image_max_width}x{settings.image_max_height}"
+        )
+    pixels = width * height
+    if pixels > settings.image_max_pixels:
+        raise ImageTooLargeError(
+            f"Image pixel count {pixels} exceeds limit of {settings.image_max_pixels}"
+        )
+
+
+def _process_image_sync(image_bytes: bytes, operation: str, value: Optional[str] = None) -> bytes:
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            image = Image.open(BytesIO(image_bytes))
+            # Validate dimensions from header metadata BEFORE loading pixel data
+            _validate_pil_dimensions(image)
+            image.load()
+    except ImageTooLargeError:
+        raise
+    except (UnidentifiedImageError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        logger.error(f"Invalid image payload: {exc}")
+        return b""
+    except Exception as exc:
+        logger.error(f"Failed to open image: {exc}")
+        return b""
+
+    has_alpha = image.mode in ("RGBA", "LA") or (
+        image.mode == "P" and "transparency" in image.info
+    )
+    if image.mode == "P" and "transparency" in image.info:
+        image = image.convert("RGBA")
+        has_alpha = True
+
+    op = operation.lower()
+    if op == "grayscale":
+        alpha = None
+        if has_alpha and image.mode == "RGBA":
+            alpha = image.split()[-1]
+        gray = ImageOps.grayscale(image.convert("RGB"))
+        if alpha is not None:
+            image = Image.merge("RGBA", (gray, gray, gray, alpha))
+        else:
+            image = gray.convert("RGB")
+    elif op == "blur":
+        image = image.filter(ImageFilter.GaussianBlur(radius=2))
+    elif op == "resize" and value:
+        width, height = _parse_resize_value(value)
+        if width and height:
+            image.thumbnail((width, height), Image.Resampling.LANCZOS)
+        elif width:
+            ratio = width / max(1, image.width)
+            new_height = max(1, int(image.height * ratio))
+            image = image.resize((width, new_height), Image.Resampling.LANCZOS)
+        else:
+            logger.warning(f"Resize skipped due to invalid value: {value}")
+    else:
+        logger.warning(f"Unknown image operation: {operation}")
+
+    buffer = BytesIO()
+    if has_alpha:
+        image.save(buffer, format="PNG")
+    else:
+        image = image.convert("RGB")
+        image.save(buffer, format="JPEG", quality=85)
+    return buffer.getvalue()
+
+
+async def process_image(image_bytes: bytes, operation: str, value: Optional[str] = None) -> bytes:
+    return await asyncio.to_thread(_process_image_sync, image_bytes, operation, value)

@@ -56,3 +56,7 @@ adapters = [
 plugins = ["nonebot_plugin_apscheduler","nonebot_plugin_lagrange"]
 plugin_dirs = ["src/plugins"]
 builtin_plugins = []
+
+[tool.pytest.ini_options]
+# Domain test directories intentionally contain repeated descriptive basenames.
+addopts = "--import-mode=importlib"

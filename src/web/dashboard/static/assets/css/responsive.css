@@ -1,0 +1,92 @@
+@media (max-width: 960px) {
+  .topbar,
+  .toolbar,
+  .hero-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .nav-tabs {
+    grid-template-columns: repeat(5, minmax(64px, 1fr));
+    overflow-x: auto;
+  }
+
+  .hero-stat {
+    justify-items: start;
+  }
+
+  .span-7,
+  .span-6,
+  .span-5 {
+    grid-column: span 12;
+  }
+
+  .people-grid,
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-brief-grid,
+  .audit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .thought-audit .info-block.context,
+  .thought-audit .info-block.output,
+  .thought-audit .info-block.audit {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .owner-shell {
+    width: min(100% - 20px, 1280px);
+    padding-top: 10px;
+  }
+
+  .topbar,
+  .panel,
+  .hero-panel,
+  .metric {
+    padding: 12px;
+  }
+
+  .nav-tabs {
+    grid-template-columns: repeat(5, 76px);
+  }
+
+  .token-row,
+  .metric-grid,
+  .people-grid,
+  .progress-dock {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-dock {
+    gap: 8px;
+  }
+
+  .roadmap-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-card summary {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 9px;
+    padding: 12px;
+  }
+
+  .detail-meta {
+    grid-column: 2;
+    max-width: 100%;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .detail-body {
+    padding: 0 12px 12px 49px;
+  }
+
+  .info-block {
+    padding: 10px;
+  }
+}

@@ -1,6 +1,8 @@
 import random
 from nonebot import on_keyword
 from nonebot.matcher import Matcher
+from nonebot.adapters.onebot.v11 import MessageEvent
+from src.services.delivery.dispatcher import finish_to_event
 
 FOOD_MENU = [
     "麻辣烫", "肯德基", "麦当劳", "汉堡王", "沙县小吃", "兰州拉面",
@@ -12,7 +14,7 @@ FOOD_MENU = [
 eat_handler = on_keyword({"吃什么", "吃啥"}, priority=50)
 
 @eat_handler.handle()
-async def handle_eat_request(matcher: Matcher):
+async def handle_eat_request(matcher: Matcher, event: MessageEvent):
 
     choice = random.choice(FOOD_MENU)
     
@@ -23,4 +25,4 @@ async def handle_eat_request(matcher: Matcher):
         f"我看看...（掐指）...今天适合用【{choice}】来填饱你的肚子~！"
     ]
     
-    await matcher.finish(random.choice(reply_messages))
+    await finish_to_event(matcher, event, random.choice(reply_messages))
