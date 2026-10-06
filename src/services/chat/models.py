@@ -31,6 +31,7 @@ class ChatRequest:
     social_state: str = "normal"
     search_outcome: SearchOutcome = field(default_factory=SearchOutcome)
     history_snapshot: HistorySnapshot | None = None
+    plugin_history: List[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

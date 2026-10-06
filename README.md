@@ -57,6 +57,9 @@
 不调用付费模型，图文合成一次发送。同一人三秒内重复同一命令会静默忽略，
 其他命令保留并按现有发送队列限频。
 
+已确认送达的插件消息按机器人和会话单独保存最近 20 条，供后续聊天引用，
+不挤占普通聊天的 20 轮历史。Redis 不可用时暂存于内存，重启后未持久化的记录会丢失。
+
 默认插件清单已包含 `discoveries`。若设置了 `PLUGIN_ENABLE_LIST`，需将
 `discoveries` 加入该清单。已有工具白名单需分别允许 `discoveries.bird`、
 `discoveries.journey`、`discoveries.journal`、`discoveries.help`；禁用名单与黑名单仍生效。

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections import OrderedDict
 from typing import Dict, List
 
 
 @dataclass
 class MemoryStorage:
     histories: Dict[str, List[dict]] = field(default_factory=dict)
+    plugin_histories: OrderedDict[str, List[dict]] = field(default_factory=OrderedDict)
     all_memory: List[str] = field(default_factory=list)
     outbound_messages: Dict[str, List[dict]] = field(default_factory=dict)
     sent_news: Dict[str, float] = field(default_factory=dict)

@@ -17,7 +17,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Literal
 
-from .observation import observe_group_output
+from .observation import observe_group_output, observe_plugin_output
 
 Category = Literal["chat", "autonomous", "news", "command", "reminder", "notice"]
 Guard = Callable[[], bool | Awaitable[bool]]
@@ -267,6 +267,11 @@ async def send_to_event(matcher, event, message, *, category: Category = "comman
     async def send():
         result = await matcher.send(message)
         acknowledged = acknowledged_result(result)
+        if acknowledged:
+            observe_plugin_output(getattr(event, "self_id", None),
+                                  "group" if group_id is not None else "private",
+                                  group_id if group_id is not None else event.user_id,
+                                  result, message, category)
         if acknowledged and group_id is not None:
             observe_group_output(getattr(event, "self_id", None), group_id,
                                  result, message, category)
@@ -291,6 +296,8 @@ async def send_to_group(bot, group_id: int, message, *, category: Category = "au
         result = await bot.send_group_msg(group_id=group_id, message=message)
         acknowledged = acknowledged_result(result)
         if acknowledged:
+            observe_plugin_output(getattr(bot, "self_id", None), "group", group_id,
+                                  result, message, category)
             observe_group_output(getattr(bot, "self_id", None), group_id,
                                  result, message, category)
         return acknowledged
@@ -303,7 +310,11 @@ async def send_to_private(bot, user_id: int, message, *, category: Category = "c
                           guard: Guard | None = None, notice_key: str | None = None) -> bool:
     async def send():
         result = await bot.send_private_msg(user_id=user_id, message=message)
-        return acknowledged_result(result)
+        acknowledged = acknowledged_result(result)
+        if acknowledged:
+            observe_plugin_output(getattr(bot, "self_id", None), "private", user_id,
+                                  result, message, category)
+        return acknowledged
 
     return await dispatch("private", user_id, send,
                           category=category, guard=guard, notice_key=notice_key)

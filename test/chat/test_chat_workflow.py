@@ -150,12 +150,15 @@ async def test_commit_follows_delivery_and_failed_send_still_cleans_files(monkey
 
     transport.reply = reply
     plan = SimpleNamespace(max_chars=80, mode="short", social_state="normal")
+    plugin_rows = [{"role": "assistant", "content": "已发送的期刊标题与 DOI",
+                    "category": "command", "message_id": "41", "sent_at_ms": 1000}]
     monkeypatch.setattr(execution, "select_reply_plan", lambda *_a, **_k: plan)
     monkeypatch.setattr(execution, "remaining_reply_delay", lambda *_a: 0)
     monkeypatch.setattr(execution, "decide_intents", lambda *_a, **_k: [])
     services = SimpleNamespace(
         history_delivery=history_double(order=order),
-        storage=SimpleNamespace(get_history=Mock(return_value=[])),
+        storage=SimpleNamespace(get_history=Mock(return_value=[]),
+                                get_plugin_history=Mock(return_value=plugin_rows)),
         context_builder=SimpleNamespace(build=AsyncMock(return_value=EnrichedChatInput("hello", "hello"))),
         chat_engine=SimpleNamespace(
             generate=AsyncMock(return_value=ChatReply("reply", [], "fake")),
@@ -171,6 +174,9 @@ async def test_commit_follows_delivery_and_failed_send_still_cleans_files(monkey
                                              read_group_context=read_context), transport, tools, None)
     read_context.assert_called_once()
     generated_request = services.chat_engine.generate.call_args.args[0]
+    assert generated_request.history == []
+    assert generated_request.plugin_history == plugin_rows
+    assert services.context_builder.build.call_args.kwargs["history"] == plugin_rows
     assert "fresh group context" in generated_request.llm_text
     assert "stale group context" not in generated_request.llm_text
     assert order == (["send"] if send_fails else ["send", "commit"])

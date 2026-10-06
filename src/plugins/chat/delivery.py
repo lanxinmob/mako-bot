@@ -15,6 +15,7 @@ from nonebot.matcher import Matcher
 
 from src.utils.message import normalize_message
 from src.services.delivery.dispatcher import dispatch, Guard, Category, acknowledged_result
+from src.services.delivery.observation import observe_plugin_output
 
 
 async def message_text(event: MessageEvent, bot: Bot) -> str:
@@ -80,9 +81,14 @@ async def send_reply(
         async def send_private():
             if not await admitted():
                 return False
-            acknowledged = acknowledged_result(await matcher.send(Message(text)))
+            message = Message(text)
+            result = await matcher.send(message)
+            acknowledged = acknowledged_result(result)
             if acknowledged and on_ack is not None:
                 on_ack()
+            if acknowledged:
+                observe_plugin_output(getattr(bot, "self_id", None), "private", event.user_id,
+                                      result, message, category)
             return acknowledged
         return await dispatch("private", event.user_id,
                               send_private, category=category, guard=guard)
@@ -104,6 +110,9 @@ async def send_reply(
         acknowledged = acknowledged_result(result)
         if acknowledged and on_ack is not None:
             on_ack()
+        if acknowledged:
+            observe_plugin_output(getattr(bot, "self_id", None), "group", event.group_id,
+                                  result, payload, category)
         if acknowledged and on_sent is not None:
             try:
                 on_sent(result, text)

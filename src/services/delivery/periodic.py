@@ -10,7 +10,7 @@ from nonebot.adapters.onebot.v11 import Message, MessageSegment
 
 from .dispatcher import dispatch
 from .effects.producer import production_plan, settle_confirmed
-from .observation import observe_group_output
+from .observation import observe_group_output, observe_plugin_output
 from .state import DeliveryAttempt, DeliverySpec, DeliveryStore, DeliveryUnavailable
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,7 @@ class PeriodicDelivery:
             result = await bot.send_group_msg(group_id=int(spec.target_id), message=message)
             acknowledged = result is True or (isinstance(result, dict) and result.get("message_id") is not None)
             if acknowledged:
+                observe_plugin_output(spec.bot_id, "group", spec.target_id, result, message, "news")
                 try:
                     observe_group_output(spec.bot_id, int(spec.target_id), result, message, "news")
                 except Exception:

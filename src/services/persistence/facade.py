@@ -10,6 +10,7 @@ from src.services.persistence.backends.redis import get_redis
 
 from src.services.persistence.backends import StorageBackend
 from src.services.persistence.history import HistoryRepository
+from src.services.persistence.plugin_history import PluginHistoryRepository
 from src.services.persistence.outbound import OutboundRepository
 from src.services.persistence.profiles import ProfilesRepository
 from src.services.persistence.notes import NotesRepository
@@ -55,6 +56,9 @@ class StorageService:
 
     def save_history(self, session_id: str, messages: List[dict]) -> None:
         return HistoryRepository(self.backend).save_history(session_id, messages)
+
+    def get_plugin_history(self, session_id: str, bot_id: str = "") -> List[dict]:
+        return PluginHistoryRepository(self.backend).read(bot_id, session_id)
 
     def append_global_record(self, record: ChatRecord) -> None:
         return HistoryRepository(self.backend).append_global_record(record)

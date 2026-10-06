@@ -37,6 +37,15 @@ async def execute(services, incoming, transport, tool_executor, rhythm):
         # enrich
         history_snapshot = await services.history_delivery.read(address.session_id)
         history = history_snapshot.messages()
+        plugin_history = []
+        plugin_reader = getattr(services.storage, "get_plugin_history", None)
+        if callable(plugin_reader):
+            try:
+                rows = await asyncio.to_thread(plugin_reader, address.session_id, incoming.bot_id)
+                if isinstance(rows, list):
+                    plugin_history = rows
+            except Exception:
+                logger.warning("插件发送历史读取失败，保留普通聊天上下文")
         decisions = decide_intents(
             normalized.plain_text if address.group_id is not None and incoming.message_id else user_text,
             has_image=bool(normalized.image_urls),
@@ -70,7 +79,7 @@ async def execute(services, incoming, transport, tool_executor, rhythm):
             user_id=incoming.address.user_id,
             user_text=user_text,
             image_urls=normalized.image_urls,
-            history=history,
+            history=[*history, *plugin_history],
         )
         llm_text = enriched.llm_text
         # Bind this request to the refreshed candidate and snapshot without an
@@ -106,6 +115,7 @@ async def execute(services, incoming, transport, tool_executor, rhythm):
             social_state=rhythm.social_state if rhythm else reply_plan.social_state,
             search_outcome=enriched.search_outcome,
             history_snapshot=history_snapshot,
+            plugin_history=plugin_history,
         )
 
         input_chars = len(llm_text) + sum(
