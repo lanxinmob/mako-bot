@@ -159,7 +159,8 @@ async def test_commit_follows_delivery_and_failed_send_still_cleans_files(monkey
         history_delivery=history_double(order=order),
         storage=SimpleNamespace(get_history=Mock(return_value=[]),
                                 get_plugin_history=Mock(return_value=plugin_rows)),
-        context_builder=SimpleNamespace(build=AsyncMock(return_value=EnrichedChatInput("hello", "hello"))),
+        context_builder=SimpleNamespace(build=AsyncMock(return_value=EnrichedChatInput(
+            "hello", "hello", image_inputs=["data:image/png;base64,c3ludGhldGlj"]))),
         chat_engine=SimpleNamespace(
             generate=AsyncMock(return_value=ChatReply("reply", [], "fake")),
             commit=Mock(side_effect=lambda *_a: order.append("commit"))),
@@ -176,6 +177,7 @@ async def test_commit_follows_delivery_and_failed_send_still_cleans_files(monkey
     generated_request = services.chat_engine.generate.call_args.args[0]
     assert generated_request.history == []
     assert generated_request.plugin_history == plugin_rows
+    assert generated_request.image_inputs == ["data:image/png;base64,c3ludGhldGlj"]
     assert services.context_builder.build.call_args.kwargs["history"] == plugin_rows
     assert "fresh group context" in generated_request.llm_text
     assert "stale group context" not in generated_request.llm_text

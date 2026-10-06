@@ -8,6 +8,7 @@ from typing import (
     Optional,
 )
 from src.services.integrations.image import describe_image_url
+from src.services.integrations.vision_input import native_vision_enabled, prepare_native_image
 from src.services.retrieval import dependencies
 from src.services.retrieval.context import SearchContextBuilder
 from src.services.retrieval.models import SearchOutcome
@@ -20,6 +21,7 @@ class EnrichedChatInput:
     image_context: str = ""
     search_context: str = ""
     search_outcome: SearchOutcome = field(default_factory=SearchOutcome)
+    image_inputs: List[str] = field(default_factory=list)
 
 
 class ImageRateLimiter:
@@ -49,11 +51,15 @@ class ChatContextBuilder:
         search_builder: Optional[SearchContextBuilder] = None,
         image_limiter: Optional[ImageRateLimiter] = None,
         describe: Callable[[str], Awaitable[str]] = describe_image_url,
+        prepare: Callable[[str], Awaitable[str]] = prepare_native_image,
+        native_vision: Optional[Callable[[], bool]] = None,
     ) -> None:
         self._deps = dependencies
         self.search_builder = search_builder or SearchContextBuilder(dependencies=dependencies)
         self.image_limiter = image_limiter or ImageRateLimiter(dependencies=dependencies)
         self.describe = describe
+        self.prepare = prepare
+        self.native_vision = native_vision or (lambda: native_vision_enabled(self._deps.get_settings()))
 
     async def build(
         self,
@@ -64,19 +70,26 @@ class ChatContextBuilder:
         history: List[dict],
     ) -> EnrichedChatInput:
         image_context = ""
+        image_inputs = []
+        native = bool(image_urls and self.native_vision())
         if image_urls and self.image_limiter.allow(user_id):
-            image_context = await self._describe_images(image_urls)
+            if native:
+                image_inputs, image_context = await self._prepare_images(image_urls)
+            else:
+                image_context = await self._describe_images(image_urls)
         elif image_urls:
             self._deps.logger.info(
                 "图片处理被速率限制拦截 user_id={} image_count={}",
                 user_id,
                 len(image_urls),
             )
+            image_context = "本次图片处理被限频拦截，没有可见图片；请稍后重发。"
 
         llm_text = user_text
         if image_urls:
             image_evidence = image_context or "图片识别未返回可用结果。"
-            llm_text = f"{user_text or '用户发送了图片。'}\n\n[图片识别结果]\n{image_evidence}"
+            marker = "图片输入状态" if native else "图片识别结果"
+            llm_text = f"{user_text or '用户发送了图片。'}\n\n[{marker}]\n{image_evidence}"
         raw_search_outcome = await self.search_builder.build(
             user_text,
             image_context=image_context,
@@ -103,7 +116,23 @@ class ChatContextBuilder:
             image_context,
             search_context,
             search_outcome,
+            image_inputs,
         )
+
+    async def _prepare_images(self, image_urls):
+        inputs, lines = [], []
+        # Sequential downloads keep memory bounded on small deployments.
+        for index, url in enumerate(image_urls[:MAX_IMAGES_TO_DESCRIBE], 1):
+            try:
+                inputs.append(await self.prepare(url))
+                lines.append(f"第{index}张图片已附加，请直接读取图片。")
+            except Exception as exc:
+                self._deps.logger.warning("图片输入准备失败({}): {}", index, type(exc).__name__)
+                lines.append(f"第{index}张图片下载或校验失败，未附加；不能猜测其内容。")
+        remaining = len(image_urls) - MAX_IMAGES_TO_DESCRIBE
+        if remaining > 0:
+            lines.append(f"还有{remaining}张图片未附加。")
+        return inputs, "\n".join(lines)
 
     async def _describe_images(self, image_urls: List[str]) -> str:
         async def describe_one(index: int, url: str) -> str:

@@ -96,3 +96,22 @@ async def test_no_provider_does_not_create_billable_attempt(isolated_redis, monk
     assert reply.model == "fallback" and reply.cost_status == "complete"
     assert not list(client.scan_iter())
     factory.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_deepseek_vision_receives_image_parts_in_one_sdk_request(isolated_redis, monkeypatch):
+    client = isolated_redis
+    sdk, factory, engine = setup(monkeypatch, client)
+    monkeypatch.setattr(provider, "has_deepseek", lambda: True)
+    monkeypatch.setattr(provider, "get_deepseek_client", factory)
+    monkeypatch.setattr(provider, "get_deepseek_model", lambda: "deepseek-v4-flash-vision")
+    image = "data:image/png;base64,c3ludGhldGlj"
+    messages = [{"role": "user", "content": [
+        {"type": "text", "text": "看图"}, {"type": "image_url", "image_url": {"url": image}}]}]
+    engine._build_messages = lambda request, plan: messages
+    reply = await engine.generate(make_request())
+    assert reply.model == "deepseek-v4-flash-vision"
+    sdk.chat.completions.create.assert_awaited_once()
+    kwargs = sdk.chat.completions.create.call_args.kwargs
+    assert kwargs["model"] == reply.model and kwargs["messages"] == messages
+    assert image not in str([client.get(key) for key in client.scan_iter("mako:generation:v1:*")])
