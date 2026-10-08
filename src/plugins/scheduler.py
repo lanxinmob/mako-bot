@@ -1,60 +1,27 @@
-"""Scheduled greetings and news delivery."""
+"""Manual news queries and links."""
 
 from __future__ import annotations
 
 import asyncio
-import random
-from datetime import date, datetime, timedelta
+from datetime import date
 
-from nonebot import get_bot, on_command
+from nonebot import on_command
 from nonebot.adapters.onebot.v11 import Message, MessageSegment, MessageEvent
 from nonebot.log import logger
 from nonebot.matcher import Matcher
-from nonebot_plugin_apscheduler import scheduler
 
-from src.core.config import get_settings
 from src.services.information.news import fetch_juejin
 from src.services.information.news import fetch_tianxin
 from src.services.information.news import yesterday
-from src.services.delivery.dedup import OutboundDedupService
 from src.services.persistence import StorageService
 from src.services.delivery.dispatcher import send_to_event, send_notice
-from src.services.delivery.periodic import PeriodicDelivery
 
 
 _storage = StorageService()
-_outbound_dedup = OutboundDedupService(_storage)
 daily_news_matcher = on_command(
     "精选文章", aliases={"news", "今日新闻", "日报"}, priority=5, block=True
 )
 bilibili_matcher = on_command("bilibili", priority=5, block=True)
-
-
-def _plain_text(message: object) -> str:
-    return message.extract_plain_text() if isinstance(message, Message) else str(message)
-
-
-async def _send_scheduled_group_message(
-    bot,
-    group_id: int | None,
-    message: Message | str,
-    *,
-    intent: str,
-    source: str,
-    period: date | None = None,
-    fingerprints: list[str] | None = None,
-) -> bool:
-    if not group_id:
-        logger.warning("定时消息未发送：DEFAULT_GROUP_ID 未配置 source={}", source)
-        return False
-    if isinstance(message, Message) and any(segment.type != "text" for segment in message):
-        raise ValueError("定期文本消息不能隐式丢弃非文本消息段")
-    planned = period or datetime.now(scheduler.timezone).date()
-    client = await asyncio.to_thread(lambda: _storage.redis)
-    return await PeriodicDelivery(client, _storage, _outbound_dedup).deliver(
-        bot, group_id, _plain_text(message), task=source, period=planned,
-        timezone=scheduler.timezone, intent=intent, fingerprints=fingerprints or [],
-    )
 
 
 async def _fetch_digest_sections(
@@ -119,47 +86,6 @@ def _digest_fingerprints(sections: list[tuple[str, list[dict]]]) -> list[str]:
         for item in news
         if item.get("fingerprint")
     ]
-
-
-@scheduler.scheduled_job("cron", hour=7, minute=0, id="mako_good_morning")
-async def good_morning_mako() -> None:
-    period = datetime.now(scheduler.timezone).date()
-    choices = [
-        "早上好哦，各位！今天也是元气满满的一天~",
-        "早上好！新的一天也要好好照顾自己哦。",
-        "起床啦，别赖床，茉子等你来捣乱~",
-        "太阳都晒屁股了，快起来开始今天的计划吧。",
-    ]
-    try:
-        await _send_scheduled_group_message(
-            get_bot(),
-            get_settings().default_group_id,
-            random.choice(choices),
-            intent="greeting",
-            source="scheduler.good_morning",
-            period=period,
-        )
-    except Exception:
-        logger.exception("早安消息发送失败")
-
-
-@scheduler.scheduled_job("cron", hour=7, minute=10, id="mako_daily_digest")
-async def send_daily_digest() -> None:
-    period = datetime.now(scheduler.timezone).date()
-    try:
-        digest_date, sections = await _fetch_digest_sections(target_date=period - timedelta(days=1))
-        message = _render_digest(digest_date, sections)
-        await _send_scheduled_group_message(
-            get_bot(),
-            get_settings().default_group_id,
-            message,
-            intent="daily_digest",
-            source="scheduler.daily_digest",
-            period=period,
-            fingerprints=_digest_fingerprints(sections),
-        )
-    except Exception:
-        logger.exception("每日资讯发送失败")
 
 
 @daily_news_matcher.handle()

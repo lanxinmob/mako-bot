@@ -26,7 +26,11 @@ def load_runner():
     return namespace["_runner"]
 
 
-def test_actual_recovery_policy_preserves_plugin_switches_period_and_target():
+def test_actual_recovery_policy_disables_retired_periodic_tasks():
+    source = Path(__file__).resolve().parents[3] / "src/plugins/scheduler.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    assert not any(isinstance(node, ast.Attribute) and node.attr == "scheduled_job"
+                   for node in ast.walk(tree))
     factory = load_runner()
     settings = SimpleNamespace(plugin_enable_list="chat", proactive_enabled=True, default_group_id=1,
                                parse_name_list=lambda value: value.split(",") if value else [])
@@ -38,7 +42,9 @@ def test_actual_recovery_policy_preserves_plugin_switches_period_and_target():
     assert not runner.allowed(periodic) and not runner.allowed(followup)
     settings.plugin_enable_list = ""
     runner = factory(object(), settings)
-    assert runner.allowed(periodic) and runner.allowed(followup)
+    assert not runner.allowed(periodic) and runner.allowed(followup)
+    assert not runner.allowed(replace(periodic, business_id="scheduler.daily_digest"))
+    assert "periodic" not in runner.handlers
     assert not runner.allowed(replace(periodic, target_id="2"))
     assert not runner.allowed(replace(periodic, revision="2000-01-01"))
     assert not runner.allowed(replace(periodic, business_id="unregistered_task"))
