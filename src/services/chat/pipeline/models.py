@@ -22,6 +22,7 @@ class ChatInput:
     read_group_context: Callable[[], str] | None = None
     refresh_before_generation: Callable[[], bool] | None = None
     work_kind: str = "chat"
+    group_memory_observed: bool = False
 
 
 class ChatTransport(Protocol):

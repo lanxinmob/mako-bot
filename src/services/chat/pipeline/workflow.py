@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from .admission import admit
 from .execution import execute
 from .participation import GroupParticipation
+from .group_memory import GroupMemoryObserver
 
 
 @dataclass
@@ -24,6 +25,7 @@ class ChatWorkflow:
     def __init__(self, services: ChatServices):
         self.services = services
         self.participation = GroupParticipation()
+        self.group_memory = GroupMemoryObserver(services)
         self._locks: dict[str, asyncio.Lock] = {}
         self._pending: dict[tuple[str, int], PendingBatch] = {}
         self._guard: asyncio.Lock | None = None

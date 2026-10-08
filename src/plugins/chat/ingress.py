@@ -1,9 +1,11 @@
 from __future__ import annotations
 import time
+from datetime import datetime
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageEvent, PrivateMessageEvent
 from nonebot.matcher import Matcher
 from src.services.chat.policy import ChatAddress
 from src.services.chat.pipeline.models import ChatInput
+from src.services.chat.pipeline.group_memory import group_memory_text
 from src.utils.message import normalize_message
 from .delivery import message_text, send_reply
 from .reminders import handle_reminder
@@ -11,11 +13,12 @@ from src.services.chat.group.models import GroupEvent
 from src.services.delivery.dispatcher import send_notice, send_to_event
 
 
-def observe(event: MessageEvent, bot: Bot, workflow):
+async def observe(event: MessageEvent, bot: Bot, workflow):
     group_id = getattr(event, "group_id", None)
     if group_id is None:
         return
     raw = event.get_message()
+    received_at = datetime.now()
     normalized = normalize_message(raw)
     quoted = getattr(event, "reply", None)
     sender = getattr(quoted, "sender", None)
@@ -29,6 +32,12 @@ def observe(event: MessageEvent, bot: Bot, workflow):
         is_bot=str(event.user_id) == str(bot.self_id),
         direct_call=event.is_tome(),
     ), normalized)
+    await workflow.group_memory.record(
+        bot_id=str(bot.self_id), message_id=str(event.message_id),
+        user_id=event.user_id, group_id=group_id,
+        nickname=event.sender.card or event.sender.nickname or str(event.user_id),
+        content=group_memory_text(normalized), received_at=received_at,
+    )
 
 def _address(event: MessageEvent) -> ChatAddress:
     return ChatAddress(
@@ -78,5 +87,7 @@ async def receive(matcher: Matcher, event: MessageEvent, bot: Bot, workflow):
         is_group_admin=getattr(event.sender, "role", "member") in {"admin", "owner"},
         started_at=started_at,
         bot_id=str(bot.self_id), message_id=str(event.message_id),
+        group_memory_observed=(getattr(event, "group_id", None) is not None
+                               and workflow.services.settings.record_undirected_group_messages),
     )
     await workflow.handle(incoming, QQChatTransport(matcher, event, bot))

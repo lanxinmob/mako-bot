@@ -161,7 +161,7 @@ class Settings(BaseSettings):
     max_history_turns: int = Field(default=50, validation_alias=AliasChoices("MAX_HISTORY_TURNS"))
     reply_random_chance: float = Field(default=0.001, validation_alias=AliasChoices("REPLY_RANDOM_CHANCE"))
     record_undirected_group_messages: bool = Field(
-        default=False,
+        default=True,
         validation_alias=AliasChoices("RECORD_UNDIRECTED_GROUP_MESSAGES"),
     )
     tool_timeout_seconds: float = Field(

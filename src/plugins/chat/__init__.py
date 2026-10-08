@@ -14,7 +14,7 @@ chat_handler = on_message(priority=40, block=True)
 
 @group_observer.handle()
 async def observe_chat(event: MessageEvent, bot: Bot) -> None:
-    observe(event, bot, workflow)
+    await observe(event, bot, workflow)
 
 
 @chat_handler.handle()

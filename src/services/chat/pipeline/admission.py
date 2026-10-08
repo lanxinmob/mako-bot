@@ -74,7 +74,7 @@ async def admit(services: ChatServices, incoming: ChatInput, transport: ChatTran
                 rhythm.reason,
             )
             return
-    if should_record_message(
+    if not incoming.group_memory_observed and should_record_message(
         message_type=incoming.address.message_type,
         directed=directed,
         will_reply=will_reply,
