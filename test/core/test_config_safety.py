@@ -19,11 +19,11 @@ def test_autonomy_requires_owner_and_target() -> None:
         Settings(AUTONOMY_ENABLED=True, AUTONOMY_OWNER_ID=123)
 
 
-def test_safe_optional_features_are_disabled_by_default() -> None:
+def test_chat_memory_and_optional_feature_defaults() -> None:
     settings = Settings()
     assert settings.autonomy_enabled is False
     assert settings.proactive_enabled is False
-    assert settings.record_undirected_group_messages is False
+    assert settings.record_undirected_group_messages is True
     assert settings.chat_rhythm_enabled is True
     assert settings.chat_reply_max_chars_micro == 168
     assert settings.chat_reply_max_chars_short == 400
