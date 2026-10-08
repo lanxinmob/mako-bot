@@ -6,6 +6,7 @@ from collections import OrderedDict
 from nonebot.log import logger
 
 from src.models.schemas import ChatRecord
+from src.services.memory.image_archive import get_image_archive, MAX_MEMORY_IMAGES
 
 
 class GroupMemoryObserver:
@@ -16,7 +17,7 @@ class GroupMemoryObserver:
         self._lock: asyncio.Lock | None = None
 
     async def record(self, *, bot_id, message_id, user_id, group_id,
-                     nickname, content, received_at):
+                     nickname, content, received_at, image_urls=()):
         services = self.services
         if (not services.settings.record_undirected_group_messages
                 or str(user_id) == str(bot_id)):
@@ -34,7 +35,8 @@ class GroupMemoryObserver:
                 await asyncio.to_thread(
                     services.storage.append_global_record,
                     ChatRecord(role="user", user_id=user_id, group_id=group_id,
-                               nickname=nickname, content=content, time=received_at),
+                               nickname=nickname, content=content, time=received_at,
+                               image_urls=list(image_urls[:MAX_MEMORY_IMAGES])),
                 )
             except Exception as exc:
                 logger.warning("群消息记忆写入失败 error_type={}", type(exc).__name__)
@@ -42,6 +44,8 @@ class GroupMemoryObserver:
             self._seen[key] = None
             while len(self._seen) > self.capacity:
                 self._seen.popitem(last=False)
+        if image_urls:
+            get_image_archive().enqueue(list(image_urls))
 
 
 def group_memory_text(normalized):

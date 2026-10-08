@@ -35,13 +35,13 @@ class TestDownloadImageData:
                 yield fake_body
 
             get_mock.aiter_bytes = fake_aiter_bytes
-            mock_client.get = AsyncMock(return_value=get_mock)
+            mock_client.stream.return_value.__aenter__.return_value = get_mock
 
             content, mime = await download_image_data("http://example.com/img.jpg")
             assert content == fake_body
             assert mime == "image/jpeg"
             mock_client.head.assert_awaited_once()
-            mock_client.get.assert_awaited_once()
+            mock_client.stream.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_head_content_length_exceeds_limit_raises(self):
@@ -56,7 +56,7 @@ class TestDownloadImageData:
             with pytest.raises(ImageTooLargeError, match="Content-Length"):
                 await download_image_data("http://example.com/big.jpg", max_size=1024)
 
-            mock_client.get.assert_not_called()
+            mock_client.stream.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_stream_chunk_exceeds_limit_raises(self):
@@ -77,7 +77,7 @@ class TestDownloadImageData:
                     yield b"x" * 5000
 
             get_mock.aiter_bytes = large_stream
-            mock_client.get = AsyncMock(return_value=get_mock)
+            mock_client.stream.return_value.__aenter__.return_value = get_mock
 
             with pytest.raises(ImageTooLargeError, match="downloaded .* exceeds"):
                 await download_image_data("http://example.com/img.png", max_size=1024)
@@ -102,7 +102,7 @@ class TestDownloadImageData:
                 yield fake_body
 
             get_mock.aiter_bytes = fake_stream
-            mock_client.get = AsyncMock(return_value=get_mock)
+            mock_client.stream.return_value.__aenter__.return_value = get_mock
 
             content, mime = await download_image_data("http://example.com/img.jpg")
             assert content == fake_body
@@ -127,7 +127,7 @@ class TestDownloadImageData:
                 yield fake_body
 
             get_mock.aiter_bytes = fake_stream
-            mock_client.get = AsyncMock(return_value=get_mock)
+            mock_client.stream.return_value.__aenter__.return_value = get_mock
 
             content, mime = await download_image_data("http://example.com/img.jpg")
             assert content == fake_body
@@ -152,7 +152,7 @@ class TestDownloadImageData:
                 yield fake_body
 
             get_mock.aiter_bytes = fake_stream
-            mock_client.get = AsyncMock(return_value=get_mock)
+            mock_client.stream.return_value.__aenter__.return_value = get_mock
 
             content, mime = await download_image_data("http://example.com/img.bin")
             assert mime == "image/png"

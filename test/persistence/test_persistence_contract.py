@@ -37,3 +37,20 @@ def test_global_record_is_readable_across_facades_with_shared_backend():
     assert second.get_recent_global_records()[0].user_id == 42
     second.save_history("private_42", [{"role": "user", "content": "hello"}])
     assert first.get_history("private_42")[0]["content"] == "hello"
+
+
+def test_image_references_round_trip_without_image_binary_or_empty_field():
+    from types import SimpleNamespace
+    import json
+
+    storage = object.__new__(StorageService)
+    storage.redis = None
+    storage.settings = SimpleNamespace(redis_required=False, global_memory_max_records=1000)
+    storage.backend.memory = MemoryStorage()
+    legacy = ChatRecord(role="user", content="fixture")
+    storage.append_global_record(legacy)
+    assert "image_urls" not in json.loads(storage.backend.memory.all_memory[0])
+    record = ChatRecord(role="user", content="图片", image_urls=["https://example.com/a"])
+    storage.append_global_record(record)
+    assert list(storage.iter_global_image_urls()) == record.image_urls
+    assert storage.list_global_records()[0].image_urls == record.image_urls

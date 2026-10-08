@@ -110,3 +110,43 @@ async def test_empty_profile_response_is_not_counted_as_updated(monkeypatch):
     monkeypatch.setattr(module, "get_deepseek_client", lambda: client)
     result = await service.run()
     assert result.profiles_updated == 0 and storage.saved is None
+
+
+def test_image_batches_cap_each_request_and_long_fragments_do_not_repeat_images():
+    records = [ChatRecord(role="user", user_id=7, content="a" * 15_000,
+                          image_urls=[f"https://example.com/{i}"])
+               for i in range(7)]
+    batches = list(module._record_batches(records))
+    images = [url for batch in batches for item in batch for url in item.image_urls]
+    assert len(images) == 7 and len(set(images)) == 7
+    assert all(sum(len(item.image_urls) for item in batch) <= 3 for batch in batches)
+
+
+@pytest.mark.asyncio
+async def test_daily_knowledge_and_profile_both_receive_archived_images(monkeypatch, tmp_path):
+    from test.media.image_fixtures import _make_png_bytes
+    from src.services.integrations.vision_input import inline_image
+
+    data = inline_image(_make_png_bytes(2, 2))
+    record = ChatRecord(role="user", user_id=7, group_id=123, nickname="fixture",
+                        content="看这个", image_urls=["https://example.com/private-image"])
+    storage = FakeStorage()
+    storage.get_recent_global_records = lambda _hours: [record]
+    storage.iter_global_image_urls = lambda: iter(record.image_urls)
+    archive = SimpleNamespace(root=tmp_path, prune=lambda _urls: None,
+                              load=AsyncMock(return_value=data))
+    completions = FakeCompletions()
+    captured = []
+    async def create(**kwargs):
+        captured.append(kwargs["messages"][0]["content"])
+        return await completions.create(**kwargs)
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    monkeypatch.setattr(module, "has_deepseek", lambda: True)
+    monkeypatch.setattr(module, "get_deepseek_client", lambda: client)
+    monkeypatch.setattr(module, "native_vision_enabled", lambda _settings: True)
+    result = await module.KnowledgePrecipitationService(storage, FakeVectorStore(), archive).run()
+    assert result.profiles_updated == 1 and len(captured) == 2
+    for content in captured:
+        assert any(part.get("image_url", {}).get("url") == data for part in content)
+        assert "群 123，发送者 7" in str(content)
+        assert "private-image" not in str(content)

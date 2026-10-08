@@ -10,6 +10,7 @@ __pycache__/
 build/
 dist/
 .reports/
+/data/memory_images/
 /AGENTS.md
 # Secrets — ignore .env and variants like .env.prod / .env.local
 # but keep .env.example trackable as the single source of truth

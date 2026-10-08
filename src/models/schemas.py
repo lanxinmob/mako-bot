@@ -15,6 +15,7 @@ class ChatRecord(BaseModel):
     user_id: Optional[int] = None
     group_id: Optional[int] = None
     time: datetime = Field(default_factory=datetime.now)
+    image_urls: list[str] = Field(default_factory=list)
 
 
 OutboundTargetType = Literal["group", "private"]

@@ -7,6 +7,7 @@ from src.services.chat.policy import should_reply
 from src.services.chat.policy import should_record_message
 from src.services.integrations.llm import has_deepseek
 from src.services.integrations.llm import has_openai
+from src.services.memory.image_archive import get_image_archive, MAX_MEMORY_IMAGES
 from .models import ChatInput, ChatServices, ChatTransport, Admission
 
 def record_incoming(
@@ -16,7 +17,7 @@ def record_incoming(
     nickname: str,
     content: str,
     image_count: int,
-) -> None:
+) -> bool:
     try:
         services.storage.append_global_record(
             ChatRecord(
@@ -26,10 +27,13 @@ def record_incoming(
                 content=content or (f"[图片消息 {image_count}张]" if image_count else ""),
                 group_id=incoming.address.group_id,
                 time=datetime.now(),
+                image_urls=list(incoming.normalized.image_urls[:MAX_MEMORY_IMAGES]),
             )
         )
+        return True
     except Exception as exc:
         logger.warning(f"写入用户聊天记录失败，继续处理消息: {exc}")
+        return False
 
 
 async def admit(services: ChatServices, incoming: ChatInput, transport: ChatTransport):
@@ -80,7 +84,7 @@ async def admit(services: ChatServices, incoming: ChatInput, transport: ChatTran
         will_reply=will_reply,
         record_undirected_group_messages=services.settings.record_undirected_group_messages,
     ):
-        await asyncio.to_thread(
+        recorded = await asyncio.to_thread(
             record_incoming,
             services,
             incoming,
@@ -88,6 +92,8 @@ async def admit(services: ChatServices, incoming: ChatInput, transport: ChatTran
             content=user_text,
             image_count=len(normalized.image_urls),
         )
+        if recorded and normalized.image_urls:
+            get_image_archive().enqueue(normalized.image_urls)
         services.audit.progress(
             "message_received",
             "收到允许持久化的聊天消息并写入全局记忆。",
