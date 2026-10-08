@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime
-import json
 
 from nonebot import get_bots
 from nonebot.log import logger
@@ -16,7 +14,6 @@ from src.services.delivery.effects.discovery import EffectScanner
 from src.services.chat.generation.discovery import GenerationCostScanner
 from src.services.chat.history_delivery.discovery import HistoryScanner
 from src.services.delivery.followups import FollowupDelivery
-from src.services.delivery.periodic import PeriodicDelivery, period_deadline
 from src.services.delivery.reminder_delivery import ReminderDelivery
 from src.services.delivery.state.recovery import DeliveryRecovery
 from src.services.persistence import StorageService
@@ -41,11 +38,6 @@ def _runner(client, settings):
         if spec.kind == "followup":
             return ("relationship_followups" in selected and settings.proactive_enabled
                     and spec.target_type == "private")
-        if spec.kind == "periodic":
-            return ("scheduler" in selected and spec.target_type == "group"
-                    and spec.target_id == str(settings.default_group_id)
-                    and spec.business_id in {"scheduler.good_morning", "scheduler.daily_digest"}
-                    and spec.revision == datetime.now(scheduler.timezone).date().isoformat())
         return False
 
     async def followup(bot, spec):
@@ -56,16 +48,7 @@ def _runner(client, settings):
         return await ReminderDelivery(client).deliver(bot, spec.business_id, spec.revision,
             valid_until_ms=spec.valid_until_ms, recovery_spec=spec)
 
-    async def periodic(bot, spec):
-        period = date.fromisoformat(spec.revision)
-        if spec.valid_until_ms != period_deadline(period, scheduler.timezone):
-            return False
-        body = json.loads(spec.payload)
-        return await PeriodicDelivery(client, _storage, dedup).deliver(bot, int(spec.target_id),
-            body["text"], task=spec.business_id, period=period, timezone=scheduler.timezone,
-            intent=body["intent"], fingerprints=body["fingerprints"], recovery_spec=spec)
-
-    return DeliveryRecovery(client, {"followup": followup, "reminder": reminder, "periodic": periodic},
+    return DeliveryRecovery(client, {"followup": followup, "reminder": reminder},
                             bot_lookup=lambda bot_id: get_bots().get(bot_id), allowed=allowed)
 
 

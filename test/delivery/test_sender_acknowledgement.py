@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from nonebot.adapters.onebot.v11 import Message, MessageSegment
+from nonebot.adapters.onebot.v11 import Message
 from src.services.delivery.followups import FollowupDelivery
 from src.services.delivery.periodic import PeriodicDelivery
 from src.services.persistence.effects import EffectUnavailable, EffectWriter
@@ -88,17 +88,12 @@ async def test_startup_restore_failure_is_reported_without_retry():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("delivered", [False, True])
-async def test_scheduled_news_only_recorded_after_send(delivered, isolated_redis):
+async def test_periodic_news_only_recorded_after_send(delivered, isolated_redis):
     dedup = Mock(check=Mock(return_value=SimpleNamespace(allowed=True)))
     storage = Mock()
     service, bot = periodic_fixture(storage, dedup, AsyncMock(return_value=delivered), isolated_redis)
-    function = load_function("src/plugins/scheduler.py", "_send_scheduled_group_message", {
-        "asyncio": asyncio, "datetime": datetime, "_plain_text": str,
-        "_outbound_dedup": dedup, "_storage": storage, "logger": Mock(),
-        "PeriodicDelivery": lambda *_: service, "Message": Message,
-        "scheduler": SimpleNamespace(timezone=timezone.utc),
-    })
-    assert await function(bot, 1, "fixture", intent="daily_digest", source="test") is delivered
+    assert await service.deliver(bot, 1, "fixture", intent="daily_digest", task="test",
+                                 period=datetime.now(timezone.utc).date(), timezone=timezone.utc) is delivered
     assert isolated_redis.llen("outbound:ledger:group:1") == int(delivered)
     assert isolated_redis.llen("all_memory") == int(delivered)
     dedup.record.assert_not_called()
@@ -144,20 +139,15 @@ async def test_followup_bookkeeping_failure_does_not_skip_other_write(failure, i
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["dedup", "history"])
-async def test_scheduled_news_bookkeeping_failure_preserves_delivery(failure, isolated_redis, monkeypatch):
+async def test_periodic_news_bookkeeping_failure_preserves_delivery(failure, isolated_redis, monkeypatch):
     dedup = Mock(check=Mock(return_value=SimpleNamespace(allowed=True)))
     storage = Mock()
     method = "record_outbound" if failure == "dedup" else "append_global_record"
     monkeypatch.setattr(EffectWriter, method, Mock(side_effect=EffectUnavailable))
     send = AsyncMock(return_value=True)
     service, bot = periodic_fixture(storage, dedup, send, isolated_redis)
-    function = load_function("src/plugins/scheduler.py", "_send_scheduled_group_message", {
-        "asyncio": asyncio, "datetime": datetime, "_plain_text": str,
-        "_outbound_dedup": dedup, "_storage": storage, "logger": Mock(),
-        "PeriodicDelivery": lambda *_: service, "Message": Message,
-        "scheduler": SimpleNamespace(timezone=timezone.utc),
-    })
-    assert await function(bot, 1, "fixture", intent="daily_digest", source="test") is True
+    assert await service.deliver(bot, 1, "fixture", intent="daily_digest", task="test",
+                                 period=datetime.now(timezone.utc).date(), timezone=timezone.utc) is True
     send.assert_awaited_once()
     assert isolated_redis.llen("outbound:ledger:group:1") == int(failure != "dedup")
     assert isolated_redis.llen("all_memory") == int(failure != "history")
@@ -189,41 +179,28 @@ async def test_relationship_followup_only_completed_after_acknowledgement(delive
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("manual", [False, True])
 @pytest.mark.parametrize("failure", ["fingerprints", "fetch", "unacknowledged"])
-async def test_digest_entry_distinguishes_delivery_from_fingerprint_failure(manual, failure, isolated_redis, monkeypatch):
+async def test_manual_digest_distinguishes_delivery_from_fingerprint_failure(failure):
     storage = Mock()
     if failure == "fingerprints":
         storage.record_sent_news.side_effect = OSError("write outcome unknown")
-        monkeypatch.setattr(EffectWriter, "record_news", Mock(side_effect=EffectUnavailable))
     fetch = AsyncMock(return_value=("date", ["section"]))
     if failure == "fetch":
         fetch.side_effect = OSError("fetch failed")
     send = AsyncMock(return_value=failure != "unacknowledged")
-    dedup = Mock(check=Mock(return_value=SimpleNamespace(allowed=True)))
-    service, bot = periodic_fixture(storage, dedup, send, isolated_redis)
-
-    async def scheduled(_bot, group, message, *, intent, source, period, fingerprints):
-        return await service.deliver(bot, group, message, intent=intent, task=source,
-                                     period=period, timezone=timezone.utc, fingerprints=fingerprints)
-
     notice, logger = AsyncMock(), Mock()
     namespace = {
         "asyncio": asyncio, "_storage": storage, "logger": logger,
         "_fetch_digest_sections": fetch, "_render_digest": Mock(return_value="digest"),
         "_digest_fingerprints": Mock(return_value=["fingerprint"]),
-        "get_bot": Mock(), "get_settings": Mock(return_value=SimpleNamespace(default_group_id=1)),
-        "_send_scheduled_group_message": scheduled, "send_to_event": send, "send_notice": notice,
-        "datetime": datetime, "timedelta": timedelta, "scheduler": SimpleNamespace(timezone=timezone.utc),
+        "send_to_event": send, "send_notice": notice,
     }
-    name = "handle_daily_news" if manual else "send_daily_digest"
-    entry = load_function("src/plugins/scheduler.py", name, namespace)
-    await entry(*([object(), object()] if manual else []))
+    entry = load_function("src/plugins/scheduler.py", "handle_daily_news", namespace)
+    await entry(object(), object())
     assert send.await_count == int(failure != "fetch")
-    assert storage.record_sent_news.call_count == int(failure == "fingerprints" and manual)
+    assert storage.record_sent_news.call_count == int(failure == "fingerprints")
     assert logger.exception.call_count == int(failure == "fetch")
-    if failure == "fingerprints" and manual:
+    if failure == "fingerprints":
         logger.warning.assert_called_once()
-    if manual:
-        keys = [call.kwargs["notice_key"] for call in notice.await_args_list]
-        assert keys == (["news.loading", "news.unavailable"] if failure == "fetch" else ["news.loading"])
+    keys = [call.kwargs["notice_key"] for call in notice.await_args_list]
+    assert keys == (["news.loading", "news.unavailable"] if failure == "fetch" else ["news.loading"])
