@@ -39,6 +39,26 @@ def _bounded_text(values: Iterable[str], max_chars: int = 12_000) -> str:
     return "\n".join(lines)
 
 
+def _record_batches(records: list[ChatRecord], *, max_chars: int = 12_000):
+    """Cover every record, splitting long messages rather than clipping a day."""
+    batch: list[ChatRecord] = []
+    size = 0
+    for record in records:
+        # Reserve enough space for identity and scene labels on each fragment.
+        content_limit = max(1, max_chars - 256)
+        content = record.content or "[空消息]"
+        for offset in range(0, len(content), content_limit):
+            fragment = record.model_copy(update={"content": content[offset:offset + content_limit]})
+            length = len(KnowledgePrecipitationService._format_record(fragment)) + 1
+            if batch and (len(batch) >= 500 or size + length > max_chars):
+                yield batch
+                batch, size = [], 0
+            batch.append(fragment)
+            size += length
+    if batch:
+        yield batch
+
+
 class KnowledgePrecipitationService:
     def __init__(
         self,
@@ -53,30 +73,42 @@ class KnowledgePrecipitationService:
             return PrecipitationResult(skipped_reason="DEEPSEEK_API_KEY is not configured")
 
         records = await asyncio.to_thread(self.storage.get_recent_global_records, hours)
-        records = sorted(records, key=lambda item: item.time)[-500:]
+        records = sorted(records, key=lambda item: item.time)
         if not records:
             return PrecipitationResult(skipped_reason="no recent chat records")
 
-        points = await self._extract_knowledge(records)
         stored = 0
-        for point in points:
+        seen: set[str] = set()
+        for batch in _record_batches(records):
             try:
-                await asyncio.to_thread(self.vector_store.add, point)
-                stored += 1
+                points = await self._extract_knowledge(batch)
             except Exception as exc:
-                logger.warning("长期记忆写入失败 point={} error={}", point[:80], exc)
+                logger.warning("长期记忆提取失败 records={} error_type={}",
+                               len(batch), type(exc).__name__)
+                continue
+            for point in points:
+                key = point.casefold()
+                if key in seen:
+                    continue
+                try:
+                    await asyncio.to_thread(self.vector_store.add, point)
+                    seen.add(key)
+                    stored += 1
+                except Exception as exc:
+                    logger.warning("长期记忆写入失败 error_type={}", type(exc).__name__)
 
         profiles = 0
-        user_ids = sorted({item.user_id for item in records if item.role == "user" and item.user_id})
-        for user_id in user_ids:
-            user_records = [
-                item for item in records if item.role == "user" and item.user_id == user_id
-            ]
+        by_user: dict[int, list[ChatRecord]] = {}
+        for item in records:
+            if item.role == "user" and item.user_id:
+                by_user.setdefault(item.user_id, []).append(item)
+        for user_id, user_records in sorted(by_user.items()):
             try:
-                await self._update_profile(user_id, user_records)
-                profiles += 1
+                if await self._update_profile(user_id, user_records):
+                    profiles += 1
             except Exception as exc:
-                logger.warning("用户画像更新失败 user_id={} error={}", user_id, exc)
+                logger.warning("用户画像更新失败 user_id={} error_type={}",
+                               user_id, type(exc).__name__)
 
         return PrecipitationResult(
             records=len(records),
@@ -88,7 +120,8 @@ class KnowledgePrecipitationService:
         transcript = _bounded_text(self._format_record(item) for item in records)
         prompt = f"""
 从最近聊天中提炼值得长期保留的共享事件或知识。忽略寒暄、临时指令、密码、令牌和私人敏感信息。
-每条必须是独立完整的一句话；涉及具体用户时保留用户 ID；最多 20 条；只输出无序列表。
+每条必须是独立完整的一句话；涉及具体用户时保留用户 ID，涉及群事件时保留群 ID。
+不同群的事件不要混为一谈；最多 20 条；没有值得保存的信息时输出空内容；只输出无序列表。
 
 聊天记录：
 {transcript}
@@ -116,12 +149,14 @@ class KnowledgePrecipitationService:
                 break
         return points
 
-    async def _update_profile(self, user_id: int, records: list[ChatRecord]) -> None:
-        nickname = next((item.nickname for item in records if item.nickname), str(user_id))
+    async def _update_profile(self, user_id: int, records: list[ChatRecord]) -> bool:
+        nickname = next((item.nickname for item in reversed(records) if item.nickname), str(user_id))
         old_profile = await asyncio.to_thread(self.storage.get_profile, user_id)
         old_text = (old_profile or {}).get("profile_text") or "暂无历史画像。"
-        transcript = _bounded_text((item.content for item in records), max_chars=8000)
-        prompt = f"""
+        updated = False
+        for batch in _record_batches(records, max_chars=8000):
+            transcript = _bounded_text((self._format_record(item) for item in batch), max_chars=8000)
+            prompt = f"""
 更新用户 {nickname}（{user_id}）的画像。只依据用户明确表达且相对稳定的信息；不要把玩笑、一次性请求或推测写成事实。
 不要保存密码、令牌、精确住址等敏感信息。保持以下四段格式：
 【核心特质】【行为模式】【关系定位】【茉子认知画像】
@@ -132,26 +167,31 @@ class KnowledgePrecipitationService:
 最近发言：
 {transcript}
 """.strip()
-        response = await asyncio.wait_for(
-            get_deepseek_client().chat.completions.create(
-                model=get_deepseek_model(),
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.2,
-                max_tokens=1400,
-            ),
-            timeout=40.0,
-        )
-        profile_text = (response.choices[0].message.content or "").strip()
-        if profile_text:
+            response = await asyncio.wait_for(
+                get_deepseek_client().chat.completions.create(
+                    model=get_deepseek_model(),
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.2,
+                    max_tokens=1400,
+                ),
+                timeout=40.0,
+            )
+            profile_text = (response.choices[0].message.content or "").strip()
+            if profile_text:
+                old_text = profile_text
+                updated = True
+        if updated:
             await asyncio.to_thread(
                 self.storage.set_profile,
                 user_id,
                 nickname,
-                profile_text,
+                old_text,
             )
+        return updated
 
     @staticmethod
     def _format_record(record: ChatRecord) -> str:
+        scene = f"group[{record.group_id}]" if record.group_id else "private"
         if record.role == "user":
-            return f"user[{record.nickname or record.user_id}_{record.user_id}]: {record.content}"
-        return f"assistant: {record.content}"
+            return f"{scene} user[{(record.nickname or str(record.user_id))[:100]}_{record.user_id}]: {record.content}"
+        return f"{scene} assistant: {record.content}"

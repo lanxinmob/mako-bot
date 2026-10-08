@@ -1,15 +1,65 @@
 """Synthetic interleaving at the real participation/workflow boundary."""
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from src.services.chat.group.models import GroupEvent
 from src.services.chat.pipeline.models import ChatInput
 from src.services.chat.pipeline.workflow import ChatWorkflow
+from src.services.chat.pipeline.group_memory import GroupMemoryObserver, group_memory_text
 from src.services.chat.policy import ChatAddress
 from src.utils.message import NormalizedMessage
+
+
+@pytest.mark.asyncio
+async def test_group_observation_persists_ambient_and_commands_without_selecting_reply():
+    from datetime import datetime
+
+    storage = SimpleNamespace(append_global_record=Mock())
+    governance = SimpleNamespace(can_chat=Mock(return_value=SimpleNamespace(allowed=True)))
+    services = SimpleNamespace(storage=storage, governance=governance,
+                              settings=SimpleNamespace(record_undirected_group_messages=True))
+    observer = GroupMemoryObserver(services)
+    async def record(message_id, content, user_id=7):
+        await observer.record(bot_id="99", group_id=1, user_id=user_id,
+                              message_id=message_id, nickname="fixture", content=content,
+                              received_at=datetime(2026, 10, 8, 12))
+    await asyncio.gather(record("ambient", "别人今天吃什么"),
+                         record("ambient", "别人今天吃什么"))
+    await record("command", "小鸟")
+    await record("self", "机器人回声", user_id=99)
+    records = [call.args[0] for call in storage.append_global_record.call_args_list]
+    assert [item.content for item in records] == ["别人今天吃什么", "小鸟"]
+    assert all(item.role == "user" and item.group_id == 1 for item in records)
+
+
+@pytest.mark.asyncio
+async def test_group_observation_respects_access_and_disabled_recording():
+    from datetime import datetime
+
+    storage = SimpleNamespace(append_global_record=Mock())
+    governance = SimpleNamespace(can_chat=Mock(return_value=SimpleNamespace(allowed=False)))
+    settings = SimpleNamespace(record_undirected_group_messages=True)
+    observer = GroupMemoryObserver(SimpleNamespace(storage=storage, governance=governance,
+                                                   settings=settings))
+    args = dict(bot_id="99", group_id=1, user_id=7, message_id="a", nickname="fixture",
+                content="hello", received_at=datetime.now())
+    await observer.record(**args)
+    storage.append_global_record.assert_not_called()
+    settings.record_undirected_group_messages = False
+    governance.can_chat.reset_mock()
+    await observer.record(**args)
+    governance.can_chat.assert_not_called()
+    storage.append_global_record.assert_not_called()
+
+
+def test_group_media_memory_keeps_text_and_markers_without_media_urls():
+    media = NormalizedMessage(plain_text="看看这个", segment_types=["text", "image", "record"],
+                              image_urls=["https://example.com/private-token"],
+                              segment_summary="private-token")
+    assert group_memory_text(media) == "看看这个\n[图片]\n[语音]"
 
 
 def request(message_id, text="mako 你好"):

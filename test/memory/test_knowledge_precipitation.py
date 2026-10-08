@@ -4,6 +4,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
+from unittest.mock import AsyncMock
 
 from src.models.schemas import ChatRecord
 import src.services.memory.knowledge_precipitation as module
@@ -67,3 +68,45 @@ async def test_daily_precipitation_uses_service_clients_and_persists_results(mon
     assert result.profiles_updated == 1
     assert vectors.points == ["用户 7 长期喜欢乌龙茶"]
     assert storage.saved[0:2] == (7, "小明")
+
+
+@pytest.mark.asyncio
+async def test_daily_batches_cover_more_than_500_records_and_all_speakers(monkeypatch):
+    records = [ChatRecord(role="user", user_id=7 if i == 0 else 8,
+                          content=f"message-{i}", group_id=1)
+               for i in range(501)]
+    storage = SimpleNamespace(get_recent_global_records=lambda _hours: records)
+    service = module.KnowledgePrecipitationService(storage, FakeVectorStore())
+    service._extract_knowledge = AsyncMock(return_value=[])
+    service._update_profile = AsyncMock(return_value=True)
+    monkeypatch.setattr(module, "has_deepseek", lambda: True)
+    result = await service.run()
+    processed = [item for call in service._extract_knowledge.call_args_list
+                 for item in call.args[0]]
+    assert [item.content for item in processed] == [item.content for item in records]
+    assert result.records == 501 and result.profiles_updated == 2
+    assert [call.args[0] for call in service._update_profile.call_args_list] == [7, 8]
+
+
+def test_long_message_fragments_preserve_content_and_transcript_budget():
+    content = "a" * 30_000
+    record = ChatRecord(role="user", user_id=7, group_id=123, nickname="fixture", content=content)
+    batches = list(module._record_batches([record]))
+    assert len(batches) > 1
+    assert "".join(item.content for batch in batches for item in batch) == content
+    assert all(len(module._bounded_text(map(module.KnowledgePrecipitationService._format_record, batch)))
+               <= 12_000 for batch in batches)
+
+
+@pytest.mark.asyncio
+async def test_empty_profile_response_is_not_counted_as_updated(monkeypatch):
+    storage = FakeStorage()
+    service = module.KnowledgePrecipitationService(storage, FakeVectorStore())
+    service._extract_knowledge = AsyncMock(return_value=[])
+    create = AsyncMock(return_value=SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=""))]))
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    monkeypatch.setattr(module, "has_deepseek", lambda: True)
+    monkeypatch.setattr(module, "get_deepseek_client", lambda: client)
+    result = await service.run()
+    assert result.profiles_updated == 0 and storage.saved is None
