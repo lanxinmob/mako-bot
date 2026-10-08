@@ -62,17 +62,17 @@ async def download_image_data(url: str, max_size: Optional[int] = None) -> tuple
                 raise ImageTooLargeError(
                     f"Image too large: Content-Length={cl} bytes exceeds limit of {max_bytes} bytes"
                 )
-        resp = await client.get(safe_url, headers=headers)
-        resp.raise_for_status()
-        # Stream-read with manual truncation to avoid buffering over-limit data
-        content = bytearray()
-        async for chunk in resp.aiter_bytes(chunk_size=65536):
-            content.extend(chunk)
-            if len(content) > max_bytes:
-                raise ImageTooLargeError(
-                    f"Image too large: downloaded {len(content)} bytes exceeds limit of {max_bytes} bytes"
-                )
-        header_mime = resp.headers.get("content-type", "").split(";")[0].strip()
+        async with client.stream("GET", safe_url, headers=headers) as resp:
+            resp.raise_for_status()
+            # Bound bytes while receiving, before httpx buffers the whole body.
+            content = bytearray()
+            async for chunk in resp.aiter_bytes(chunk_size=65536):
+                if len(content) + len(chunk) > max_bytes:
+                    raise ImageTooLargeError(
+                        f"Image too large: downloaded {len(content) + len(chunk)} bytes exceeds limit of {max_bytes} bytes"
+                    )
+                content.extend(chunk)
+            header_mime = resp.headers.get("content-type", "").split(";")[0].strip()
         result = bytes(content)
         mime = header_mime if header_mime.startswith("image/") else _detect_mime(result)
         return result, mime

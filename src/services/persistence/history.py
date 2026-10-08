@@ -43,7 +43,8 @@ class HistoryRepository(Repository):
         self.backend.memory.histories[session_id] = clipped
 
     def append_global_record(self, record: ChatRecord) -> None:
-        payload = json.dumps(record.model_dump(mode="json"), ensure_ascii=False)
+        payload = json.dumps(record.model_dump(mode="json", exclude={"image_urls"}
+                                               if not record.image_urls else None), ensure_ascii=False)
         if self.redis:
             self.redis.rpush("all_memory", payload)
             self.redis.ltrim(
@@ -86,3 +87,26 @@ class HistoryRepository(Repository):
             if record.time.timestamp() >= threshold:
                 records.append(record)
         return records
+
+    def iter_global_image_urls(self):
+        """Page retained references; an uncertain snapshot must not trigger deletion."""
+        client = self.redis
+        if client is None and self.settings.redis_required:
+            raise RuntimeError("retained image references unavailable")
+        if client is not None:
+            before = (client.llen("all_memory"), client.lindex("all_memory", 0),
+                      client.lindex("all_memory", -1))
+            pages = (client.lrange("all_memory", start, start + 499)
+                     for start in range(0, before[0], 500))
+        else:
+            pages = [list(self.backend.memory.all_memory)]
+        for page in pages:
+            for raw in page:
+                # Malformed rows abort cleanup rather than assuming no references.
+                record = ChatRecord.model_validate_json(raw)
+                yield from record.image_urls
+        if client is not None:
+            after = (client.llen("all_memory"), client.lindex("all_memory", 0),
+                     client.lindex("all_memory", -1))
+            if before != after:
+                raise RuntimeError("retained history changed during image scan")

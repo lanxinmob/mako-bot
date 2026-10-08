@@ -37,6 +37,7 @@ async def observe(event: MessageEvent, bot: Bot, workflow):
         user_id=event.user_id, group_id=group_id,
         nickname=event.sender.card or event.sender.nickname or str(event.user_id),
         content=group_memory_text(normalized), received_at=received_at,
+        image_urls=normalized.image_urls,
     )
 
 def _address(event: MessageEvent) -> ChatAddress:

@@ -8,12 +8,15 @@ from typing import Iterable
 
 from nonebot.log import logger
 
+from src.core.config import get_settings
 from src.models.schemas import ChatRecord
 from src.services.integrations.llm import get_deepseek_client
 from src.services.integrations.llm import get_deepseek_model
 from src.services.integrations.llm import has_deepseek
 from src.services.persistence import StorageService
 from src.services.memory.vector_store import VectorStore
+from src.services.memory.image_archive import get_image_archive, memory_model_content, MAX_MEMORY_IMAGES
+from src.services.integrations.vision_input import native_vision_enabled
 
 
 @dataclass(frozen=True)
@@ -43,18 +46,24 @@ def _record_batches(records: list[ChatRecord], *, max_chars: int = 12_000):
     """Cover every record, splitting long messages rather than clipping a day."""
     batch: list[ChatRecord] = []
     size = 0
+    image_count = 0
     for record in records:
         # Reserve enough space for identity and scene labels on each fragment.
         content_limit = max(1, max_chars - 256)
         content = record.content or "[空消息]"
         for offset in range(0, len(content), content_limit):
-            fragment = record.model_copy(update={"content": content[offset:offset + content_limit]})
+            images = record.image_urls[:MAX_MEMORY_IMAGES] if offset == 0 else []
+            fragment = record.model_copy(update={"content": content[offset:offset + content_limit],
+                                                  "image_urls": images})
             length = len(KnowledgePrecipitationService._format_record(fragment)) + 1
-            if batch and (len(batch) >= 500 or size + length > max_chars):
+            if batch and (len(batch) >= 500 or size + length > max_chars
+                          or image_count + len(images) > MAX_MEMORY_IMAGES):
                 yield batch
                 batch, size = [], 0
+                image_count = 0
             batch.append(fragment)
             size += length
+            image_count += len(images)
     if batch:
         yield batch
 
@@ -64,9 +73,11 @@ class KnowledgePrecipitationService:
         self,
         storage: StorageService | None = None,
         vector_store: VectorStore | None = None,
+        image_archive=None,
     ) -> None:
         self.storage = storage or StorageService()
         self.vector_store = vector_store or VectorStore()
+        self.image_archive = image_archive or get_image_archive()
 
     async def run(self, *, hours: int = 24) -> PrecipitationResult:
         if not has_deepseek():
@@ -74,6 +85,12 @@ class KnowledgePrecipitationService:
 
         records = await asyncio.to_thread(self.storage.get_recent_global_records, hours)
         records = sorted(records, key=lambda item: item.time)
+        if self.image_archive.root.is_dir():
+            try:
+                await asyncio.to_thread(self.image_archive.prune,
+                                        self.storage.iter_global_image_urls())
+            except Exception:
+                logger.warning("记忆图片清理跳过：保留范围未确认")
         if not records:
             return PrecipitationResult(skipped_reason="no recent chat records")
 
@@ -122,14 +139,19 @@ class KnowledgePrecipitationService:
 从最近聊天中提炼值得长期保留的共享事件或知识。忽略寒暄、临时指令、密码、令牌和私人敏感信息。
 每条必须是独立完整的一句话；涉及具体用户时保留用户 ID，涉及群事件时保留群 ID。
 不同群的事件不要混为一谈；最多 20 条；没有值得保存的信息时输出空内容；只输出无序列表。
+图片是用户分享的内容，不代表图中人物就是发送者，也不代表图中事件发生在发送者身上。
+看不到的图片不得推测；只提炼有上下文依据的内容。
 
 聊天记录：
 {transcript}
 """.strip()
+        model_content = await memory_model_content(
+            prompt, records, self.image_archive, vision_enabled=native_vision_enabled(get_settings()),
+        )
         response = await asyncio.wait_for(
             get_deepseek_client().chat.completions.create(
                 model=get_deepseek_model(),
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": model_content}],
                 temperature=0.2,
                 max_tokens=1600,
             ),
@@ -159,6 +181,7 @@ class KnowledgePrecipitationService:
             prompt = f"""
 更新用户 {nickname}（{user_id}）的画像。只依据用户明确表达且相对稳定的信息；不要把玩笑、一次性请求或推测写成事实。
 不要保存密码、令牌、精确住址等敏感信息。保持以下四段格式：
+分享图片不能单独证明用户的身份、外貌、经历或稳定偏好；看不到的图片不得推测。
 【核心特质】【行为模式】【关系定位】【茉子认知画像】
 
 历史画像：
@@ -167,10 +190,13 @@ class KnowledgePrecipitationService:
 最近发言：
 {transcript}
 """.strip()
+            model_content = await memory_model_content(
+                prompt, batch, self.image_archive, vision_enabled=native_vision_enabled(get_settings()),
+            )
             response = await asyncio.wait_for(
                 get_deepseek_client().chat.completions.create(
                     model=get_deepseek_model(),
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[{"role": "user", "content": model_content}],
                     temperature=0.2,
                     max_tokens=1400,
                 ),

@@ -83,6 +83,9 @@ class StorageService:
     def get_recent_global_records(self, hours: int=24) -> List[ChatRecord]:
         return HistoryRepository(self.backend).get_recent_global_records(hours)
 
+    def iter_global_image_urls(self):
+        return HistoryRepository(self.backend).iter_global_image_urls()
+
     def record_outbound_message(self, record: OutboundMessageRecord) -> OutboundMessageRecord:
         return OutboundRepository(self.backend).record_outbound_message(record)
 

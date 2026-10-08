@@ -68,7 +68,8 @@ class EffectWriter:
 
     def append_global_record(self, effect_id, record: ChatRecord, *, max_records):
         return self._apply(effect_id, "history", ["all_memory"], {
-            "record": record.model_dump_json(), "max_records": self._count(max_records, 1000), "ttl": 0})
+            "record": record.model_dump_json(exclude={"image_urls"} if not record.image_urls else None),
+            "max_records": self._count(max_records, 1000), "ttl": 0})
 
     def record_outbound(self, effect_id, record: OutboundMessageRecord, *, max_records, ttl):
         return self._apply(effect_id, "outbound", [f"outbound:ledger:{record.target_type}:{record.target_id}"], {

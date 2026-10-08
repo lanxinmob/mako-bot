@@ -15,7 +15,7 @@ def native_vision_enabled(settings):
     return bool(getattr(settings, "openai_api_key", None))
 
 
-def inline_image(content):
+def validated_image_mime(content):
     with warnings.catch_warnings():
         warnings.simplefilter("error", Image.DecompressionBombWarning)
         with Image.open(BytesIO(content)) as image:
@@ -25,6 +25,11 @@ def inline_image(content):
             if mime is None:
                 raise ValueError("unsupported image format")
             image.verify()
+    return mime
+
+
+def inline_image(content):
+    mime = validated_image_mime(content)
     return f"data:{mime};base64," + base64.b64encode(content).decode("ascii")
 
 
