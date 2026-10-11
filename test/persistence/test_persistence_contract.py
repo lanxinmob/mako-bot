@@ -47,10 +47,11 @@ def test_image_references_round_trip_without_image_binary_or_empty_field():
     storage.redis = None
     storage.settings = SimpleNamespace(redis_required=False, global_memory_max_records=1000)
     storage.backend.memory = MemoryStorage()
-    legacy = ChatRecord(role="user", content="fixture")
+    legacy = ChatRecord(role="user", content="fixture", time=datetime(2026, 10, 8, 12))
     storage.append_global_record(legacy)
     assert "image_urls" not in json.loads(storage.backend.memory.all_memory[0])
-    record = ChatRecord(role="user", content="图片", image_urls=["https://example.com/a"])
+    record = ChatRecord(role="user", content="图片", time=datetime(2026, 10, 8, 12, 1),
+                        image_urls=["https://example.com/a"])
     storage.append_global_record(record)
     assert list(storage.iter_global_image_urls()) == record.image_urls
     assert storage.list_global_records()[0].image_urls == record.image_urls
