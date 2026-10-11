@@ -21,6 +21,7 @@ from src.services.autonomy.repository import AutonomyRepository
 def test_autonomy_plugin_loads_and_parses_intent() -> None:
     nonebot.init()
     nonebot.get_driver().register_adapter(OneBotV11Adapter)
+    nonebot.require("nonebot_plugin_apscheduler")
     plugin = nonebot.load_plugin("src.plugins.autonomy")
     assert plugin is not None
 
