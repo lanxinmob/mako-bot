@@ -116,6 +116,9 @@ class DashboardService:
 
 
     def get_frontend_summary(self, *, limit: int = 200) -> dict:
+        from .presenters.companion import snapshot as companion_snapshot
+        from .presenters.ledger import controls, current_summary, annotate, status
+        from src.services.memory.ledger.runtime import for_storage
         summary = self.get_summary(
             notes_limit=limit,
             profiles_limit=limit,
@@ -124,13 +127,16 @@ class DashboardService:
             autonomy_limit=max(limit, 100),
             recent_records_limit=limit,
         )
+        views = controls(self.storage, summary)
+        summary = current_summary(summary, views)
         profile = summary.profile or self._default_profile()
         roadmap_tasks = self._roadmap_tasks(summary.goals, summary.tasks, summary.events)
         roadmap_groups = self._roadmap_groups(roadmap_tasks)
         progress = self._progress(roadmap_tasks, summary.events)
         notes = self._format_notes(summary.notes)
-        long_term_memory = self._format_long_term_memory(self.storage.list_long_term_memory_points(limit=limit))
-        people = self._format_people(summary.profiles, summary.relationship_memories)
+        long_term_memory = self._format_long_term_memory([] if any(v.controlled for v in views.values()) else
+                                                       self.storage.list_long_term_memory_points(limit=limit))
+        people = annotate(self._format_people(summary.profiles, summary.relationship_memories), views)
         thought_traces = self._format_traces(summary.thought_traces)
         recent_progress = self._format_recent_progress(summary.events)
         mako_profile = self._format_mako_profile(profile, roadmap_tasks, summary.thought_traces)
@@ -159,7 +165,8 @@ class DashboardService:
                 "people": people,
                 "user_profiles": {"items": people, "latest": people[0] if people else None, "total": len(people)},
                 "relationship_memories": [
-                    self._format_relationship_memory(memory) for memory in summary.relationship_memories
+                    dict(self._format_relationship_memory(memory), ledger=status(views[memory.user_id]))
+                    for memory in summary.relationship_memories
                 ],
                 "thought_traces": thought_traces,
                 "thinking_summary": thought_traces[0]["summary"] if thought_traces else "",
@@ -175,6 +182,9 @@ class DashboardService:
                 "goals": self._build_goal_tree(summary.goals or self._default_goals(), summary.tasks),
                 "recent_progress": recent_progress,
                 "raw": summary.model_dump(mode="json"),
+                'memory_control': [dict(user_id=u, **status(v)) for u, v in views.items() if u is not None],
+                'memory_persistence': status(for_storage(self.storage, [0]))['persistence'],
+                'companion': companion_snapshot(self.storage, limit),
             }
         )
         return {"ok": True, "data": data}

@@ -13,7 +13,7 @@ from test.autonomy.test_pending_atomic import isolated_redis
 from test.delivery.effects.source_fixtures import install_task, make_source, replace_source
 
 
-@pytest.fixture(params=["followup", "reminder"])
+@pytest.fixture(params=["followup", "reminder", "private_reminder"])
 def source_case(isolated_redis, request):
     client = isolated_redis
     repo, snapshot, spec = make_source(client, request.param)

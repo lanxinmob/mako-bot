@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def production_plan(spec):
-    if spec.kind == "reminder":
+    if spec.kind in {"reminder", "companion"}:
         return build_plan(spec)
     settings = get_settings()
     retention = max(settings.outbound_dedup_hours, settings.outbound_greeting_cooldown_hours)

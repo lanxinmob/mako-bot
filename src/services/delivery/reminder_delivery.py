@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 def reminder_spec(snapshot, *, valid_until_ms):
     """Deadline comes from the scheduler's misfire plus outbound wait budget."""
     item = snapshot.record
+    target_type, target_id = item.delivery_target
     return DeliverySpec(
-        "reminder", snapshot.intent["bot_id"], "group", str(item.group_id),
+        "reminder", snapshot.intent["bot_id"], target_type, str(target_id),
         item.reminder_id, snapshot.revision, item.content, valid_until_ms,
         "reminders", item.reminder_id, snapshot.digest, REVISION_KEY,
     )
@@ -51,19 +52,23 @@ class ReminderDelivery:
         async def send(frozen):
             # Text must not be parsed as CQ codes supplied in reminder content.
             message = Message(MessageSegment.text(frozen.payload))
-            result = await bot.send_group_msg(group_id=int(frozen.target_id), message=message)
+            if frozen.target_type == "private":
+                result = await bot.send_private_msg(user_id=int(frozen.target_id), message=message)
+            else:
+                result = await bot.send_group_msg(group_id=int(frozen.target_id), message=message)
             acknowledged = result is True or (
                 isinstance(result, dict) and result.get("message_id") is not None)
             if acknowledged:
-                observe_plugin_output(bot.self_id, "group", frozen.target_id, result, message, "reminder")
-                try:
-                    observe_group_output(bot.self_id, int(frozen.target_id), result, message, "reminder")
-                except Exception:
-                    logger.warning("Reminder delivered; group observation unresolved")
+                observe_plugin_output(bot.self_id, frozen.target_type, frozen.target_id, result, message, "reminder")
+                if frozen.target_type == "group":
+                    try:
+                        observe_group_output(bot.self_id, int(frozen.target_id), result, message, "reminder")
+                    except Exception:
+                        logger.warning("Reminder delivered; group observation unresolved")
             return acknowledged
 
         try:
-            await self.schedule("group", snapshot.record.group_id,
+            await self.schedule(spec.target_type, int(spec.target_id),
                                 lambda: attempt.send(send), category="reminder")
         finally:
             if not attempt.attempted:

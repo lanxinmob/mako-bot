@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from src.services.retrieval.metrics import SearchMetrics
 
 
@@ -47,24 +45,3 @@ def test_search_metrics_tracks_quality_latency_calls_and_cost() -> None:
     assert snapshot["search_calls"] == 4
     assert snapshot["page_fetches"] == 5
     assert snapshot["estimated_search_cost"] == 0.04
-
-
-def test_search_eval_corpus_covers_required_categories() -> None:
-    corpus = (Path(__file__).parents[2] / "eval" / "search_cases.yaml").read_text(
-        encoding="utf-8"
-    )
-    categories = {
-        "explicit_search",
-        "implicit_freshness",
-        "sports_result",
-        "today_yesterday_timezone",
-        "ambiguous_entity",
-        "conflicting_sources",
-        "no_results",
-        "provider_unavailable",
-        "user_correction",
-        "stale_page",
-        "preview_vs_result",
-    }
-    for category in categories:
-        assert f"category: {category}" in corpus

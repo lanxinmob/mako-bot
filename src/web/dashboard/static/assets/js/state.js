@@ -21,6 +21,8 @@ export const navItems = [
   ['memory', '记忆'],
   ['people', '人物'],
   ['thinking', '思考'],
+  ['rhythm', '群聊节奏'],
+  ['companion', '考试陪伴'],
   ['roadmap', '路线图']
 ];
 
@@ -34,6 +36,8 @@ export const statusOptions = [
 
 export const state = {
   summary: fallbackSummary,
+  rhythm: null,
+  rhythmError: '',
   loading: false,
   error: '',
   token: getInitialToken(),

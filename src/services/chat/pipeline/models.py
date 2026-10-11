@@ -1,6 +1,6 @@
 """Transport-free inputs and explicit chat service dependencies."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol, Callable
 from src.services.chat.policy import ChatAddress
 from src.utils.message import NormalizedMessage
@@ -23,6 +23,8 @@ class ChatInput:
     refresh_before_generation: Callable[[], bool] | None = None
     work_kind: str = "chat"
     group_memory_observed: bool = False
+    read_group_snapshot: Callable | None = None
+    source_ref: dict = field(default_factory=dict)
 
 
 class ChatTransport(Protocol):
@@ -55,4 +57,10 @@ class ChatServices:
 @dataclass(frozen=True)
 class Admission:
     will_reply: bool
+    rhythm: Any
+
+
+@dataclass(frozen=True)
+class PreSendDiscard:
+    """Fresh context is needed; no primary transport has been invoked."""
     rhythm: Any

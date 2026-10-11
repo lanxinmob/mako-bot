@@ -25,8 +25,15 @@ if not raw then
     return 'inconsistent'
 end
 local source = decode(raw)
+local target_matches = source and (
+    (spec.target_type == 'group' and type(source.group_id) == 'number' and source.group_id > 0
+        and tostring(source.group_id) == spec.target_id)
+    or (spec.target_type == 'private' and source.group_id == 0
+        and type(source.user_id) == 'number' and source.user_id > 0
+        and source.session_id == 'private_' .. tostring(source.user_id)
+        and tostring(source.user_id) == spec.target_id))
 if not source or source.reminder_id ~= spec.business_id
-    or tostring(source.group_id) ~= spec.target_id or type(source.content) ~= 'string'
+    or not target_matches or type(source.content) ~= 'string'
     or intent.operation ~= 'upsert' or intent.bot_id == '' then
     return 'inconsistent'
 end

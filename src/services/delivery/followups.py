@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from types import SimpleNamespace
+from src.services.persistence.ledger import LedgerRepository
+from src.services.memory.ledger.runtime import snapshot as memory_snapshot
 
 from nonebot.adapters.onebot.v11 import Message
 
@@ -22,6 +25,9 @@ class FollowupDelivery:
         self.dedup, self.schedule = dedup, schedule
 
     async def deliver(self, bot, user_id, memory_id, *, recovery_spec=None):
+        view = memory_snapshot(LedgerRepository(SimpleNamespace(redis=self.source.redis)), [user_id])
+        if not view.available:
+            return False
         snapshot = await asyncio.to_thread(self.source.load, user_id, memory_id)
         if snapshot is None:
             return False
@@ -43,7 +49,7 @@ class FollowupDelivery:
         attempt = DeliveryAttempt(self.store, spec, claim.token)
 
         async def send(frozen):
-            result = await bot.send_private_msg(user_id=int(frozen.target_id), message=Message(frozen.payload))
+            result = await view.send(lambda: bot.send_private_msg(user_id=int(frozen.target_id), message=Message(frozen.payload)))
             acknowledged = result is True or (isinstance(result, dict) and result.get("message_id") is not None)
             if acknowledged:
                 observe_plugin_output(frozen.bot_id, "private", frozen.target_id, result,

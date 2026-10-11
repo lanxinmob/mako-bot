@@ -33,6 +33,9 @@ class ChatRequest:
     history_snapshot: HistorySnapshot | None = None
     plugin_history: List[dict] = field(default_factory=list)
     image_inputs: List[str] = field(default_factory=list)
+    memory_view: object = None
+    memory_prompt_history: List[dict] | None = None
+    bot_id: str = ''
 
 
 @dataclass(frozen=True)

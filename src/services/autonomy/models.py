@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Literal, Optional
 
 Action = Literal["speak", "ask_owner", "silent"]
@@ -18,6 +18,7 @@ class AutonomyDecision:
     message: str
     reason: str
     intent: str = "other"
+    memory_versions: dict = field(default_factory=dict)
 
 @dataclass
 class PendingAction:
@@ -28,6 +29,7 @@ class PendingAction:
     reason: str
     created_at: float
     intent: str = "other"
+    memory_versions: dict = field(default_factory=dict)
 
 @dataclass
 class TargetHint:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING
 
 from nonebot.log import logger
 
@@ -14,9 +14,11 @@ from src.services.integrations.llm import get_deepseek_client
 from src.services.integrations.llm import get_deepseek_model
 from src.services.integrations.llm import has_deepseek
 from src.services.persistence import StorageService
-from src.services.memory.vector_store import VectorStore
+if TYPE_CHECKING:
+    from src.services.memory.vector_store import VectorStore
 from src.services.memory.image_archive import get_image_archive, memory_model_content, MAX_MEMORY_IMAGES
 from src.services.integrations.vision_input import native_vision_enabled
+from .ledger.runtime import for_storage, critical, confirmed_thread
 
 
 @dataclass(frozen=True)
@@ -76,7 +78,10 @@ class KnowledgePrecipitationService:
         image_archive=None,
     ) -> None:
         self.storage = storage or StorageService()
-        self.vector_store = vector_store or VectorStore()
+        if vector_store is None:
+            from src.services.memory.vector_store import VectorStore
+            vector_store = VectorStore()
+        self.vector_store = vector_store
         self.image_archive = image_archive or get_image_archive()
 
     async def run(self, *, hours: int = 24) -> PrecipitationResult:
@@ -93,10 +98,16 @@ class KnowledgePrecipitationService:
                 logger.warning("记忆图片清理跳过：保留范围未确认")
         if not records:
             return PrecipitationResult(skipped_reason="no recent chat records")
+        view = for_storage(self.storage, [r.user_id for r in records if r.user_id is not None])
+        if not view.available:
+            return PrecipitationResult(records=len(records), skipped_reason='memory control unavailable')
 
         stored = 0
         seen: set[str] = set()
         for batch in _record_batches(records):
+            batch_view = for_storage(self.storage, [r.user_id for r in batch if r.user_id is not None])
+            if batch_view.controlled:
+                continue  # Mixed historic fragments have no trustworthy provenance.
             try:
                 points = await self._extract_knowledge(batch)
             except Exception as exc:
@@ -108,7 +119,11 @@ class KnowledgePrecipitationService:
                 if key in seen:
                     continue
                 try:
-                    await asyncio.to_thread(self.vector_store.add, point)
+                    async with critical():
+                        if not view.current() or not batch_view.current():
+                            return PrecipitationResult(records=len(records), knowledge_points=stored,
+                                                       skipped_reason='memory version changed')
+                        await confirmed_thread(self.vector_store.add, point)
                     seen.add(key)
                     stored += 1
                 except Exception as exc:
@@ -172,6 +187,9 @@ class KnowledgePrecipitationService:
         return points
 
     async def _update_profile(self, user_id: int, records: list[ChatRecord]) -> bool:
+        view = for_storage(self.storage, [user_id])
+        if view.controlled:
+            return False
         nickname = next((item.nickname for item in reversed(records) if item.nickname), str(user_id))
         old_profile = await asyncio.to_thread(self.storage.get_profile, user_id)
         old_text = (old_profile or {}).get("profile_text") or "暂无历史画像。"
@@ -207,12 +225,10 @@ class KnowledgePrecipitationService:
                 old_text = profile_text
                 updated = True
         if updated:
-            await asyncio.to_thread(
-                self.storage.set_profile,
-                user_id,
-                nickname,
-                old_text,
-            )
+            async with critical():
+                if not view.current():
+                    return False
+                await confirmed_thread(self.storage.set_profile, user_id, nickname, old_text)
         return updated
 
     @staticmethod

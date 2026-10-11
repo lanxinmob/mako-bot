@@ -60,7 +60,8 @@ def strip_legacy_enrichment(content: str) -> str:
 def history_for_prompt(request: ChatRequest) -> List[dict]:
     messages: List[dict] = []
     disputed_replaced = False
-    for item in reversed(request.history):
+    prompt_history = request.memory_prompt_history if request.memory_prompt_history is not None else request.history
+    for item in reversed(prompt_history):
         role = item.get("role")
         if role not in {"user", "assistant"}:
             continue

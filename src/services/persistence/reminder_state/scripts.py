@@ -52,12 +52,19 @@ if inspect_action == 'yes' then
         end
         local spec_ok, spec = pcall(cjson.decode, action.spec_json)
         local source_ok, source = pcall(cjson.decode, raw)
+        local target_matches = spec_ok and source_ok and type(spec) == 'table' and type(source) == 'table' and (
+            (spec.target_type == 'group' and type(source.group_id) == 'number' and source.group_id > 0
+                and spec.target_id == tostring(source.group_id))
+            or (spec.target_type == 'private' and source.group_id == 0
+                and type(source.user_id) == 'number' and source.user_id > 0
+                and source.session_id == 'private_' .. tostring(source.user_id)
+                and spec.target_id == tostring(source.user_id)))
         if not spec_ok or not source_ok or type(spec) ~= 'table' or type(source) ~= 'table'
             or not meta or spec.kind ~= 'reminder' or spec.business_id ~= id
             or spec.revision ~= rev or spec.bot_id ~= meta.bot_id
             or spec.source_key ~= KEYS[1] or spec.source_field ~= id
             or spec.source_digest ~= redis.sha1hex(raw) or spec.revision_key ~= KEYS[2]
-            or spec.target_type ~= 'group' or spec.target_id ~= tostring(source.group_id) then
+            or not target_matches then
             return result(0, 'wrong_action')
         end
         phase = action.state

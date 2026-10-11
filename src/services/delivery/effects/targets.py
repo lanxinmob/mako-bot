@@ -36,7 +36,7 @@ class EffectTargets:
                 or hashlib.sha1(task.payload_json.encode()).hexdigest() != task.payload_digest):
             raise EffectNeedsReview("invalid leased effect payload")
         payload = json.loads(task.payload_json)
-        if task.kind in {"followup_complete", "reminder_complete"}:
+        if task.kind in {"followup_complete", "reminder_complete", "companion_complete"}:
             if task.kind != lease.spec.kind + "_complete" or task.payload_json != source_payload(lease.spec):
                 raise EffectNeedsReview("source effect binding mismatch")
             return self.sources.complete_effect(task.effect_id, lease.spec)

@@ -15,6 +15,7 @@ local function read_plan(state)
         or #plan.tasks < 1 or #plan.tasks > 3 then plan_error() end
     local required = {}
     if spec.kind == 'reminder' then required.reminder_complete = true
+    elseif spec.kind == 'companion' then required.companion_complete = true
     elseif spec.kind == 'followup' then
         required.followup_complete, required.outbound_dedup = true, true
     elseif spec.kind == 'periodic' then
@@ -35,7 +36,7 @@ local function read_plan(state)
         ids[task.effect_id], required[task.kind] = true, nil
         local payload_ok, p = pcall(cjson.decode, task.payload_json)
         if not payload_ok or type(p) ~= 'table' then plan_error() end
-        if task.kind == 'reminder_complete' or task.kind == 'followup_complete' then
+        if task.kind == 'reminder_complete' or task.kind == 'followup_complete' or task.kind == 'companion_complete' then
             if task.time_basis ~= 'none' or p.action_id ~= plan.action_id
                 or p.spec_digest ~= state.digest then plan_error() end
         elseif task.time_basis ~= 'transport_recorded' or p.sent_at_ms ~= cjson.null then

@@ -11,6 +11,7 @@ from src.services.chat.group.models import GroupEvent
 from src.services.chat.group.service import GroupConversationService
 from src.services.tools.intent import decide_intents
 from src.utils.message import NormalizedMessage
+from src.services.chat.observability import events as traces
 
 
 @dataclass
@@ -57,7 +58,18 @@ class GroupParticipation:
 
     def observe(self, bot_id: str, event: GroupEvent, normalized=None):
         service = self.service(bot_id)
+        traces.observe(bot_id, event.group_id, event.message_id)
+        prior = service.window.groups.get(event.group_id)
+        candidate = prior.candidate if prior else None
         snapshot = service.observe(event)
+        if candidate and not service.candidate_is_current(candidate):
+            reason = ("candidate_expired" if service.clock() >= candidate.expires_at else
+                      "closure" if event.user_id == candidate.user_id and service.policy.closure(event.text) else
+                      "answered" if event.reply_to_message_id == candidate.target_message_id else
+                      "replaced" if snapshot.trigger and snapshot.trigger.message_id != candidate.target_message_id else
+                      "context_changed")
+            traces.update(bot_id, event.group_id, candidate.target_message_id,
+                          stage="canceled", outcome_reason_code=reason)
         self._expire_receipts()
         state = service.window.get(event.group_id)
         media = normalized if normalized is not None else NormalizedMessage(plain_text=event.text)
@@ -117,6 +129,7 @@ class GroupParticipation:
             transport.category = "command"
             transport.on_sent = lambda result, text: observe_sent(result, text, kind="tool")
             return replace(incoming, directed=True, work_kind="tool",
+                           read_group_snapshot=lambda: service.snapshot(group_id),
                            group_context=read_context(), read_group_context=read_context)
 
         if _explicit_tool(incoming.normalized):
@@ -129,6 +142,7 @@ class GroupParticipation:
         while True:
             snapshot = service.snapshot(group_id)
             decision = service.select_decision(snapshot)
+            traces.decision(incoming.bot_id, decision, owner=incoming.message_id)
             if decision.target_message_id != incoming.message_id or decision.action == "ignore":
                 return None
             if decision.action == "wait":
@@ -140,15 +154,21 @@ class GroupParticipation:
             break
 
         def current():
-            return service.candidate_is_current(candidate)
+            valid = service.candidate_is_current(candidate)
+            if not valid:
+                traces.phase(incoming, "canceled", "candidate_expired" if service.clock() >= candidate.expires_at
+                             else "guard_rejected")
+            return valid
 
         def refresh_before_generation():
             nonlocal candidate
             if service.candidate_is_current(candidate):
                 return True
             decision = service.select_decision(service.snapshot(group_id))
+            traces.decision(incoming.bot_id, decision, owner=incoming.message_id)
             refreshed = service.revalidate_candidate(candidate, decision)
             if refreshed is None:
+                traces.phase(incoming, "canceled", "guard_rejected")
                 return False
             candidate = refreshed
             return True
@@ -161,5 +181,6 @@ class GroupParticipation:
         transport.on_sent = sent
         transport.cancel_candidate = lambda: service.cancel_candidate(candidate)
         return replace(incoming, group_context=snapshot.render(), is_current=current,
+                       read_group_snapshot=lambda: service.snapshot(group_id),
                        read_group_context=read_context,
                        refresh_before_generation=refresh_before_generation)

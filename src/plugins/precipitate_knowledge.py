@@ -73,7 +73,7 @@ async def handle_profiles(matcher: Matcher, event: MessageEvent, bot: Bot) -> No
         await matcher.finish()
         return
     try:
-        text = await asyncio.to_thread(profile_view.render, argument, user_id=event.user_id,
+        text, memory_view = await asyncio.to_thread(profile_view.render_versioned, argument, user_id=event.user_id,
                                        owner_id=get_settings().autonomy_owner_id)
     except PermissionError:
         await matcher.finish()
@@ -81,7 +81,8 @@ async def handle_profiles(matcher: Matcher, event: MessageEvent, bot: Bot) -> No
     except Exception:
         logger.warning("Owner profile lookup unavailable")
         text = "笔记暂时翻不开，稍后再试。"
+        memory_view = None
     # Always reply privately; the shared guard checks ownership again at send time.
     await send_to_private(bot, event.user_id, Message(MessageSegment.text(text)),
-                          category="command", guard=allowed)
+                          category="command", guard=allowed, memory_view=memory_view)
     await matcher.finish()

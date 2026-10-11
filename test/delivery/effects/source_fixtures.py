@@ -24,8 +24,9 @@ def make_source(client, kind):
                             item.memory_id, snapshot.digest, revision_key(7))
     else:
         repo = ReminderStateStore(client)
-        item = ReminderRecord(reminder_id="fixture", session_id="group_1", user_id=7,
-                              group_id=1, content="synthetic",
+        private = kind == "private_reminder"
+        item = ReminderRecord(reminder_id="fixture", session_id="private_7" if private else "group_1", user_id=7,
+                              group_id=0 if private else 1, content="synthetic",
                               remind_time=datetime.now() + timedelta(hours=1))
         snapshot = repo.create(item, bot_id="99").snapshot
         spec = reminder_spec(snapshot, valid_until_ms=2**52)

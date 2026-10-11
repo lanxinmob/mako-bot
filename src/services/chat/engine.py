@@ -21,6 +21,7 @@ from src.services.chat.policy import select_reply_plan
 from src.services.chat.policy import truncate_reply
 from .generation.provider import call_recorded, summarize_costs
 from src.services.memory.mako_context import MakoRuntimeContext
+from src.services.memory.ledger.generation import memory_generation
 from src.services.retrieval.metrics import search_metrics
 from src.services.persistence import StorageService
 
@@ -43,6 +44,7 @@ class ChatEngine:
         self.settings = get_settings()
 
 
+    @memory_generation
     async def generate(self, request: ChatRequest) -> ChatReply:
         # Profile, Redis and embedding access are synchronous integrations.
         # Keep them off NoneBot's event loop so one cold model load does not
@@ -71,6 +73,9 @@ class ChatEngine:
                 cost_status="not_required",
             )
         messages = await asyncio.to_thread(self._build_messages, request, plan)
+        if request.memory_view is not None and not request.memory_view.current():
+            from .generation.invocation import GenerationNotAdmitted
+            raise GenerationNotAdmitted('memory version changed during message construction')
         max_tokens = max(plan.max_tokens, 1200) if outcome.factual_mode else plan.max_tokens
         cost_reports = []
         text, model = await self._call_llm(messages, max_tokens=max_tokens,

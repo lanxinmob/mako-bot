@@ -26,7 +26,7 @@ def isolated_redis(tmp_path):
         creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
     )
     client = redis.Redis(host="127.0.0.1", port=port, decode_responses=True,
-                         socket_connect_timeout=.2, socket_timeout=.5)
+                         socket_connect_timeout=.2, socket_timeout=.5, protocol=2)
     try:
         deadline = time.monotonic() + 5
         while True:

@@ -76,16 +76,18 @@ def build_plan(spec, *, outbound_max_records=None, outbound_ttl=None,
                       "payload_digest": hashlib.sha1(raw.encode()).hexdigest(),
                       "time_basis": "transport_recorded" if timed else "none"})
 
-    if spec.kind not in {"followup", "reminder", "periodic"}:
+    if spec.kind not in {"followup", "reminder", "periodic", "companion"}:
         raise ValueError("unsupported delivery plan")
-    if spec.kind in {"followup", "reminder"}:
+    if spec.kind in {"followup", "reminder", "companion"}:
         validate_source_spec(spec)
         # Source payload binds the entire spec, not just a mutable business ID.
         kind = spec.kind + "_complete"
         task(kind, json.loads(source_payload(spec)))
         assert tasks[-1]["effect_id"] == source_effect_id(spec)
-    if spec.kind == "reminder":
-        if spec.target_type != "group" or not spec.source_digest:
+    if spec.kind == "companion":
+        pass  # Private projection is part of the version-bound source completion.
+    elif spec.kind == "reminder":
+        if spec.target_type not in {"group", "private"} or not spec.source_digest:
             raise ValueError("invalid reminder source")
     else:
         if type(utc_offset_seconds) is not int or not -86399 <= utc_offset_seconds <= 86399:

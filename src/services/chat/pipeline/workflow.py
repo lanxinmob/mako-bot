@@ -4,13 +4,14 @@ import time
 from nonebot.log import logger
 from src.services.chat.policy import remaining_reply_delay
 from src.services.chat.policy import select_reply_plan
-from .models import ChatInput, ChatServices, ChatTransport
+from .models import ChatInput, ChatServices, ChatTransport, PreSendDiscard
 
 from dataclasses import dataclass, replace
 from .admission import admit
 from .execution import execute
 from .participation import GroupParticipation
 from .group_memory import GroupMemoryObserver
+from src.services.chat.observability.events import phase
 
 
 @dataclass
@@ -37,7 +38,12 @@ class ChatWorkflow:
 
     async def handle(self, incoming: ChatInput, transport: ChatTransport):
         if incoming.address.group_id is not None and incoming.message_id:
-            incoming = await self.participation.prepare(incoming, transport)
+            original = incoming
+            try:
+                incoming = await self.participation.prepare(incoming, transport)
+            except asyncio.CancelledError:
+                phase(incoming, "canceled", "task_canceled")
+                raise
             if incoming is None:
                 return
             lock = self._locks.setdefault(incoming.address.session_id, asyncio.Lock())
@@ -47,9 +53,34 @@ class ChatWorkflow:
                             and not incoming.refresh_before_generation()):
                         return
                     if incoming.is_current is None or incoming.is_current():
-                        await self.handle_locked(incoming, transport)
+                        outcome = await self.handle_locked(incoming, transport)
+                        # Only a proven pre-transport discard can regenerate once.
+                        # Unknown/acknowledged sends and replaced/closed/expired
+                        # requests never enter this branch.
+                        if isinstance(outcome, PreSendDiscard):
+                            prior_memory = getattr(transport, 'memory_view', None)
+                            if prior_memory is not None and not prior_memory.current():
+                                return
+                            service = self.participation.service(incoming.bot_id)
+                            state = service.window.get(str(incoming.address.group_id))
+                            if (state and state.pending_target and
+                                    state.pending_target.message_id == incoming.message_id):
+                                transport.cancel_candidate()
+                                refreshed = await self.participation.prepare(original, transport)
+                                if prior_memory is not None and not prior_memory.current():
+                                    return
+                                if refreshed is not None and refreshed.is_current():
+                                    incoming = refreshed
+                                    # Admission, relationship absorption and rhythm
+                                    # accounting already ran; do not repeat them.
+                                    await execute(self.services, incoming, transport,
+                                                  self.services.make_tools(), outcome.rhythm)
+            except asyncio.CancelledError:
+                phase(incoming, "canceled", "task_canceled")
+                raise
             finally:
                 transport.cancel_candidate()
+                phase(incoming, "finished")
             return
         delay = self.services.settings.chat_reply_debounce_seconds
         media = incoming.normalized
@@ -135,13 +166,13 @@ class ChatWorkflow:
             return
 
         try:
-            await asyncio.to_thread(
-                services.relationship.absorb_user_message,
-                incoming.address.user_id,
-                nickname,
-                user_text,
-            )
+            absorb = getattr(services.relationship, 'absorb_incoming', None)
+            if callable(absorb):
+                await absorb(incoming)
+            else:
+                await asyncio.to_thread(services.relationship.absorb_user_message,
+                                        incoming.address.user_id, nickname, user_text)
         except Exception as exc:
             logger.warning(f"关系记忆吸收失败，继续普通聊天: {exc}")
 
-        await execute(services, incoming, transport, tool_executor, rhythm)
+        return await execute(services, incoming, transport, tool_executor, rhythm)

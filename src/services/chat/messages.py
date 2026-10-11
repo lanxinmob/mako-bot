@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from dataclasses import replace
+from src.services.memory.ledger.runtime import for_storage
 from typing import List, Optional
 
 from nonebot.log import logger
@@ -47,21 +49,25 @@ class MessageBuilder:
         self.runtime_context = runtime_context
 
     def build(self, request: ChatRequest, plan: Optional[ReplyPlan] = None) -> List[dict]:
+        view = request.memory_view or for_storage(self.storage, [request.user_id])
+        if request.memory_prompt_history is None:
+            request = replace(request, memory_prompt_history=view.history(request.bot_id, request.session_id, request.history))
         plan = plan or request.reply_plan or select_reply_plan(
             request.user_text,
             message_type=request.message_type,
             directed=request.directed,
         )
         try:
-            profile = self.storage.get_profile(request.user_id) or {}
-            profile_text = profile.get("profile_text") or "暂无已保存的档案；不能据此断言是初次认识。"
+            profile = {} if view.controlled else self.storage.get_profile(request.user_id) or {}
+            profile_text = ('账本优先；旧画像暂停使用。' if view.controlled else
+                            profile.get("profile_text") or "暂无已保存的档案；不能据此断言是初次认识。")
         except Exception as exc:
             logger.warning(f"用户画像读取失败，已使用空画像: {exc}")
             profile_text = "档案暂时读取失败；不要把记忆不可用说成不认识对方。"
         try:
             knowledge = [
                 item
-                for item in self.knowledge_search(request.user_text)
+                for item in ([] if view.controlled else self.knowledge_search(request.user_text))
                 if knowledge_visible_to_user(item, request.user_id)
             ]
         except Exception as exc:
@@ -69,14 +75,15 @@ class MessageBuilder:
             knowledge = []
         knowledge_text = "\n".join(knowledge) if knowledge else "暂无相关长期记忆。"
         try:
-            mako_runtime = self.runtime_context.build_for_user(request.user_id)
+            mako_runtime = (self.runtime_context.build_for_user(request.user_id) if view.available else
+                            '个人记忆控制不可用；本轮只使用当前输入。')
         except Exception as exc:
             logger.warning(f"Mako 运行时档案读取失败，已使用基础人设: {exc}")
             mako_runtime = "Mako 运行时档案暂不可用。"
         reply_policy = plan.prompt_contract()
         plugin_lines = []
         plugin_chars = 0
-        for item in reversed(request.plugin_history[-20:]):
+        for item in reversed([] if view.controlled else request.plugin_history[-20:]):
             if not valid_entry(item):
                 continue
             text = str(item.get("content", ""))

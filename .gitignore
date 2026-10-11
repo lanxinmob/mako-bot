@@ -12,6 +12,7 @@ dist/
 .reports/
 /data/memory_images/
 /AGENTS.md
+/specs/
 # Secrets — ignore .env and variants like .env.prod / .env.local
 # but keep .env.example trackable as the single source of truth
 .env

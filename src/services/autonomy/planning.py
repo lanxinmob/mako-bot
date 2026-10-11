@@ -9,6 +9,7 @@ from src.services.integrations.llm import get_deepseek_client
 from src.services.integrations.llm import get_deepseek_model
 from src.services.integrations.llm import has_deepseek
 from .models import AutonomyDecision
+from src.services.memory.ledger.runtime import for_storage
 from .parsing import extract_json_object, parse_decision, extract_target_hint, sanitize_message_text, message_needs_polish, looks_like_suggestion
 
 async def is_autonomy_suggestion(ctx, text: str) -> bool:
@@ -135,8 +136,16 @@ async def decide(ctx, suggestion: Optional[str] = None) -> AutonomyDecision:
 
     target_hint = extract_target_hint(suggestion or "")
     recent_records = ctx.storage.get_recent_global_records(hours=ctx.settings.autonomy_context_hours)
-    context = ctx.policy.format_records(recent_records)
     participant_ids = [record.user_id for record in recent_records if record.user_id is not None]
+    participant_ids += [ctx.settings.autonomy_owner_id]
+    if target_hint.target_type == 'private' and target_hint.target_id:
+        participant_ids.append(target_hint.target_id)
+    view = for_storage(ctx.storage, participant_ids)
+    if not view.available:
+        return AutonomyDecision('silent', 'none', None, 0, 'high', '', '记忆控制不可用')
+    if view.controlled:
+        recent_records = []
+    context = ctx.policy.format_records(recent_records)
     persistent_context = ctx.runtime_context.build_for_autonomy(participant_ids)
     prompt = f"""
 你是常陆茉子自主行动决策器。你要判断自己是否应该主动发言，而不是服从任何人的转发命令。
@@ -213,6 +222,15 @@ owner 建议：
         decision = parse_decision(extract_json_object(content))
         decision = ctx.policy.apply_target_hint(decision, target_hint)
         decision = await polish_decision_message(ctx, decision, suggestion)
+        if not view.current():
+            return AutonomyDecision('silent', 'none', None, 0, 'high', '', '记忆已更新')
+        if decision.target_type == 'private' and decision.target_id not in view.users:
+            # A model-selected subject was not in the frozen input subject set.
+            target_view = for_storage(ctx.storage, [decision.target_id])
+            if not target_view.available or target_view.controlled:
+                return AutonomyDecision('silent', 'none', None, 0, 'high', '', '目标记忆未接纳')
+            decision.memory_versions.update(dict(target_view.stamp))
+        decision.memory_versions.update(dict(view.stamp))
         ctx.repository.append_thought_trace(
             "decision_made",
             "自主行动完成一次决策；仅保存结构化结论和审计摘要，不保存隐藏推理链。",

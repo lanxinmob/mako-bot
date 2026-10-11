@@ -8,6 +8,8 @@ from src.services.memory.mako_context import MakoRuntimeContext
 def test_relationship_memory_is_user_scoped_correctable_and_deletable() -> None:
     storage = StorageService()
     storage.redis = None
+    storage.backend.ledger_test_memory = True
+    storage.backend.ledger_legacy_test = True
     service = RelationshipService(storage=storage)
     owner_id = 910001
     other_id = 910002
@@ -36,6 +38,8 @@ def test_relationship_memory_is_user_scoped_correctable_and_deletable() -> None:
 def test_duplicate_relationship_statement_does_not_create_another_memory() -> None:
     storage = StorageService()
     storage.redis = None
+    storage.backend.ledger_test_memory = True
+    storage.backend.ledger_legacy_test = True
     service = RelationshipService(storage=storage)
     user_id = 910003
 
@@ -50,6 +54,8 @@ def test_duplicate_relationship_statement_does_not_create_another_memory() -> No
 def test_transient_instruction_is_not_saved_as_a_taboo() -> None:
     storage = StorageService()
     storage.redis = None
+    storage.backend.ledger_test_memory = True
+    storage.backend.ledger_legacy_test = True
     service = RelationshipService(storage=storage)
     user_id = 910004
 
@@ -61,6 +67,8 @@ def test_transient_instruction_is_not_saved_as_a_taboo() -> None:
 def test_relationship_changes_preserve_detailed_profile_and_update_live_context() -> None:
     storage = StorageService()
     storage.redis = None
+    storage.backend.ledger_test_memory = True
+    storage.backend.ledger_legacy_test = True
     user_id = 910005
     storage.set_profile(user_id, "小明", "核心特质：认真\n行为模式：细心\n关系定位：熟人\n茉子认知画像：可信")
     saved = storage.get_profile(user_id).copy()

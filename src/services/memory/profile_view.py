@@ -53,7 +53,23 @@ class ProfileViewService:
             return "\n".join(lines)
         return self.full(matches[0])
 
+    def render_versioned(self, argument, *, user_id, owner_id):
+        from .ledger.runtime import for_storage
+        if not is_profile_owner(user_id, owner_id):
+            raise PermissionError('owner required')
+        profiles = self.storage.list_profiles()
+        users = [int(p['user_id']) for p in profiles]
+        if re.fullmatch(r'[1-9][0-9]{0,19}', argument.strip()):
+            users.append(int(argument.strip()))
+        view = for_storage(self.storage, users)
+        return self.render(argument, user_id=user_id, owner_id=owner_id), view
+
     def full(self, profile):
+        from .ledger.runtime import for_storage
+        view = for_storage(self.storage, [profile['user_id']])
+        state = '\n历史档案，暂停使用。' if view.controlled else ''
+        if not view.available:
+            state += ' 记忆控制读取失败。'
         updated = profile.get("last_updated") or "未记录"
         text = profile.get("profile_text") or "这页还没写下正文。"
-        return f"茉子的笔记 · {self.label(profile)}\n更新于：{updated}\n\n{text}"
+        return f"茉子的笔记 · {self.label(profile)}{state}\n更新于：{updated}\n\n{text}"

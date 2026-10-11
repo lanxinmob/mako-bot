@@ -85,8 +85,34 @@ async def verify():
                 assert response.headers[key] == value
         for limit in (0, 201):
             assert (await client.get(endpoint + f"?limit={limit}")).status_code == 422
+        from src.services.chat.observability import events
+        rhythm_endpoint = '/mako/dashboard/api/group-rhythm'
+        for headers in ({}, {'Authorization': 'Bearer wrong'}):
+            assert (await client.get(rhythm_endpoint, headers=headers)).status_code == 401
+        for headers in ({'Authorization': 'Bearer synthetic-dashboard-token'},
+                        {'X-Dashboard-Token': 'synthetic-dashboard-token'}):
+            events.store.observe('private-bot', 'private-group', 'private-message')
+            events.store.update('private-bot', 'private-group', 'private-message',
+                                action='ignore', reason_code='reply_to_other', stage='finished')
+            response = await client.get(rhythm_endpoint + '?limit=1', headers=headers)
+            assert response.status_code == 200
+            assert response.json()['data']['source'] == 'runtime'
+            assert len(response.json()['data']['items']) == 1
+            assert 'private-' not in response.text
+            for key, value in routes.SECURITY_HEADERS.items():
+                assert response.headers[key] == value
+        assert (await client.get(rhythm_endpoint + '?limit=201',
+                    headers={'X-Dashboard-Token': 'synthetic-dashboard-token'})).status_code == 422
+        original_snapshot = events.store.snapshot
+        def unavailable(*_):
+            raise RuntimeError('synthetic visibility failure')
+        events.store.snapshot = unavailable
+        assert (await client.get(rhythm_endpoint,
+                    headers={'X-Dashboard-Token': 'synthetic-dashboard-token'})).status_code == 503
+        events.store.snapshot = original_snapshot
         settings.dashboard_token = ""
         assert (await client.get(endpoint)).status_code == 503
+        assert (await client.get(rhythm_endpoint)).status_code == 503
     print("PASS real routes: public shell, auth 401/503/Bearer/X-Dashboard-Token, limits, JSON, security headers, asset MIME")
 
 

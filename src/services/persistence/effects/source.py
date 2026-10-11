@@ -42,8 +42,13 @@ def _source_keys(spec):
     if spec.kind == "followup" and spec.target_type == "private":
         keys = (f"relationship:{spec.target_id}",
                 f"mako:delivery:v1:source:followup:{spec.target_id}", "relationship:followups")
-    elif spec.kind == "reminder" and spec.target_type == "group":
+    elif spec.kind == "reminder" and spec.target_type in {"group", "private"}:
         keys = ("reminders", "mako:delivery:v1:source:reminder", "mako:delivery:v1:reminder:intents")
+    elif spec.kind == 'companion':
+        from src.services.persistence.companion.models import validate_spec
+        validate_spec(spec)
+        keys = (spec.source_key, spec.revision_key,
+                f'mako:companion:v1:plans:{spec.target_id}')
     else:
         raise ValueError("unsupported source completion")
     if (spec.source_key != keys[0] or spec.revision_key != keys[1]
@@ -67,6 +72,9 @@ class SourceEffectWriter:
             raise ValueError("invalid source effect identity")
         if self.redis is None:
             raise EffectUnavailable("source effects require Redis")
+        if spec.kind == 'companion':
+            from src.services.persistence.companion.effect import complete_effect
+            return complete_effect(self.redis, effect_id, spec)
         # Domain modules are separate from the shared authorization and receipt
         # protocol, and never receive arbitrary stored Redis instructions.
         if spec.kind == "followup":

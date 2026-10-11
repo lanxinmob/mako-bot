@@ -16,6 +16,7 @@ from nonebot.matcher import Matcher
 from src.utils.message import normalize_message
 from src.services.delivery.dispatcher import dispatch, Guard, Category, acknowledged_result
 from src.services.delivery.observation import observe_plugin_output
+from src.services.chat.observability.events import tracked_send
 
 
 async def message_text(event: MessageEvent, bot: Bot) -> str:
@@ -61,6 +62,7 @@ async def send_reply(
     on_sent=None,
     before_send=None,
     on_ack=None,
+    memory_view=None,
 ) -> bool:
     """Render member display names as @ segments, with a text fallback."""
 
@@ -82,7 +84,7 @@ async def send_reply(
             if not await admitted():
                 return False
             message = Message(text)
-            result = await matcher.send(message)
+            result = await memory_view.send(lambda: matcher.send(message)) if memory_view else await matcher.send(message)
             acknowledged = acknowledged_result(result)
             if acknowledged and on_ack is not None:
                 on_ack()
@@ -106,7 +108,8 @@ async def send_reply(
     async def send():
         if not await admitted():
             return False
-        result = await matcher.send(payload)
+        sender = lambda: tracked_send(matcher, payload, bot, event, category)
+        result = await memory_view.send(sender) if memory_view else await sender()
         acknowledged = acknowledged_result(result)
         if acknowledged and on_ack is not None:
             on_ack()

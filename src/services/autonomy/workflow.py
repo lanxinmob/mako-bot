@@ -54,6 +54,7 @@ async def handle_decision(ctx, bot: Any, decision: AutonomyDecision) -> str:
             decision.message,
             decision.reason,
             intent=decision.intent,
+            memory_versions=decision.memory_versions,
         )
         return "sent" if sent else "rejected"
     if ctx.policy.should_ask_owner(decision):

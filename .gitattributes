@@ -1,0 +1,2 @@
+# Frozen evaluation fingerprints require identical bytes on every platform.
+/eval/group_rhythm/*.jsonl text eol=lf

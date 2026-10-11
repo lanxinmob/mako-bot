@@ -47,11 +47,12 @@ def test_followups_find_both_legacy_indexes_without_mutation(isolated_redis):
     assert [client.dump(key) for key in keys] == before
 
 
-def test_reminders_show_legacy_and_overdue_without_initializing_revision(isolated_redis):
+@pytest.mark.parametrize("target_type", ["group", "private"])
+def test_reminders_show_legacy_and_overdue_without_initializing_revision(isolated_redis, target_type):
     client = isolated_redis
     for name, delta, versioned in [("legacy_future", 3600, False), ("legacy_past", -60, False),
                                   ("new_future", 3600, True), ("new_past", -60, True)]:
-        item = record(client, job_id=name, delta=delta)
+        item = record(client, job_id=name, delta=delta, target_type=target_type)
         client.hset("reminders", name, item.model_dump_json())
         if versioned:
             client.hset(REVISION_KEY, name, "revision")
@@ -60,6 +61,7 @@ def test_reminders_show_legacy_and_overdue_without_initializing_revision(isolate
     assert {row.business_id: row.status for row in rows} == {
         "legacy_future": "legacy_unverified", "legacy_past": "legacy_unverified",
         "new_past": "overdue_check_action"}
+    assert {row.target for row in rows} == {"private:7" if target_type == "private" else "group:1"}
     assert [client.dump(key) for key in ["reminders", REVISION_KEY]] == before
 
 

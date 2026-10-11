@@ -18,9 +18,9 @@ APPLICATION_PLUGINS = (
     "dashboard",
     "scheduler",
     "weather",
-    "what_to_eat",
     "precipitate_knowledge",
     "relationship_followups",
+    "companion",
 )
 REQUIRED_PLUGINS = frozenset({"chat", "health"})
 

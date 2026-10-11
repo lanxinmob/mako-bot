@@ -34,10 +34,12 @@ def _runner(client, settings):
 
     def allowed(spec):
         if spec.kind == "reminder":
-            return spec.target_type == "group"
+            return spec.target_type in {"group", "private"}
         if spec.kind == "followup":
             return ("relationship_followups" in selected and settings.proactive_enabled
                     and spec.target_type == "private")
+        if spec.kind == 'companion':
+            return 'companion' in selected and spec.target_type == 'private'
         return False
 
     async def followup(bot, spec):
@@ -48,7 +50,17 @@ def _runner(client, settings):
         return await ReminderDelivery(client).deliver(bot, spec.business_id, spec.revision,
             valid_until_ms=spec.valid_until_ms, recovery_spec=spec)
 
-    return DeliveryRecovery(client, {"followup": followup, "reminder": reminder},
+    async def companion(bot, spec):
+        from src.services.companion.delivery import CompanionDelivery
+        from src.services.governance.service import GovernanceService
+        governance = GovernanceService(_storage)
+        def current_access(user):
+            selected_now = select_application_plugins(settings.parse_name_list(settings.plugin_enable_list))
+            return 'companion' in selected_now and governance.can_chat(user).allowed
+        return await CompanionDelivery(_storage, allowed=current_access).deliver(
+            bot, int(spec.target_id), spec.business_id, recovery_spec=spec)
+
+    return DeliveryRecovery(client, {"followup": followup, "reminder": reminder, 'companion': companion},
                             bot_lookup=lambda bot_id: get_bots().get(bot_id), allowed=allowed)
 
 

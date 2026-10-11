@@ -73,6 +73,9 @@ class MakoRuntimeContext:
         )
 
     def relationship_context(self, user_id: int, *, limit: int = 12) -> str:
+        from .ledger.runtime import for_storage
+        if not for_storage(self.storage, [user_id]).available:
+            return '个人记忆控制读取失败，未使用个人条目。'
         try:
             memories = self.storage.list_relationship_memories(user_id, status="", limit=limit)
         except Exception:
@@ -111,16 +114,21 @@ class MakoRuntimeContext:
         return "\n".join(lines) if lines else "暂无持久化的活跃目标或任务。"
 
     def build_for_user(self, user_id: int) -> str:
+        from .ledger.runtime import for_storage
+        controlled = for_storage(self.storage, [user_id]).controlled
         return (
             "[Mako 自身档案]\n"
             f"{self.identity_context()}\n\n"
             "[与当前用户的关系]\n"
             f"{self.relationship_context(user_id)}\n\n"
             "[当前目标]\n"
-            f"{self.goal_context()}"
+            f"{'旧目标上下文暂停使用。' if controlled else self.goal_context()}"
         )
 
     def build_for_autonomy(self, user_ids: Iterable[int]) -> str:
+        from .ledger.runtime import for_storage
+        user_ids = list(user_ids)
+        controlled = for_storage(self.storage, user_ids).controlled
         unique_ids: list[int] = []
         for user_id in user_ids:
             if user_id not in unique_ids:
@@ -136,7 +144,7 @@ class MakoRuntimeContext:
             "[Mako 自身档案]\n"
             f"{self.identity_context()}\n\n"
             "[活跃目标]\n"
-            f"{self.goal_context()}\n\n"
+            f"{'旧目标上下文暂停使用。' if controlled else self.goal_context()}\n\n"
             "[近期参与者关系，仅可按相同 user_id 使用]\n"
             f"{relationships}"
         )

@@ -65,7 +65,7 @@ async def test_reminder_adapter_delegates_persistent_version_and_ack(delivered):
     runtime = SimpleNamespace(source=SimpleNamespace(load=Mock(return_value=snapshot), redis=object()),
                               wait_seconds=120)
     bot, logger = Mock(), Mock()
-    function = load_function("src/plugins/chat/reminders.py", "send_group_reminder", {
+    function = load_function("src/plugins/chat/reminders.py", "send_reminder", {
         "asyncio": asyncio, "get_bot": Mock(return_value=bot), "logger": logger,
         "_runtime": AsyncMock(return_value=runtime), "ReminderDelivery": Mock(return_value=service),
     })

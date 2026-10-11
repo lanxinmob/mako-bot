@@ -9,6 +9,6 @@ def test_chat_plugin_loads_through_nonebot() -> None:
 
     nonebot.init()
     nonebot.get_driver().register_adapter(OneBotV11Adapter)
-    plugin = nonebot.load_plugin("src.plugins.chat")
+    plugin = nonebot.get_plugin('chat') or nonebot.load_plugin("src.plugins.chat")
     assert plugin is not None
 

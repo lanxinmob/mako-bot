@@ -1,5 +1,7 @@
 import { state, navItems, statusOptions } from './state.js';
 import { asArray, text, normalizeEvidence, getPercent } from './format.js';
+import { renderRhythm } from './rhythm.js';
+import { renderCompanion } from './companion.js';
 
 const root = document.getElementById('dashboard-root');
 
@@ -156,7 +158,20 @@ function renderMemory(summary) {
     ]),
     h('div', { className: 'panel span-6' }, [
       h('div', { className: 'section-title' }, [h('h2', { text: '关系记忆' })]),
-      memories.length ? h('div', { className: 'card-stack' }, memories.map((memory) => card(memory.title, memory.body, memory.date))) : emptyState('没有匹配的关系记忆。')
+      h('p', {text: summary.memory_persistence || '持久化状态未知'}),
+      ...asArray(summary.memory_control).map((control) => h('p', {text: `${control.user_id} · ${control.mode} · ${control.persistence}`})),
+      memories.length ? h('div', { className: 'card-stack' }, memories.map((memory) => renderDetail(
+        `${memory.memory_id} · ${memory.title}`,
+        `${({active: '有效', done: '已完成', replaced: '已替换', forgotten: '已遗忘'})[memory.memory_status] || '状态未知'} · ${memory.ledger.mode || ''}`,
+        h('div', { className: 'detail-body' }, [
+          h('p', {text: memory.memory_status === 'forgotten' ? '正文和来源片段已清空' : memory.body}),
+          h('p', {text: memory.ledger.persistence || '持久化状态未知'}),
+          h('p', {text: memory.evidence_kind === 'legacy_unknown' ? '未保存原始来源；不能确认原话和发生时间' : `依据：${memory.source_excerpt}`}),
+          h('p', {text: `发生：${memory.source_ref.occurred_at || '未知'}；接收：${memory.source_ref.received_at || '未知'}`}),
+          h('p', {text: `替换：${memory.replaces || '无'}；被替换为：${memory.replaced_by || '无'}`}),
+          h('p', {text: memory.confidence_label})
+        ]), memory.date
+      ))) : emptyState('没有匹配的关系记忆；请核对记忆控制状态。')
     ])
   ]);
 }
@@ -169,6 +184,7 @@ function renderPeople(summary) {
       person.name,
       [person.role, person.last_updated ? `更新 ${person.last_updated}` : '', person.memory_count ? `${person.memory_count} 条关系记忆` : ''].filter(Boolean).join(' · ') || '未标注关系',
       h('div', { className: 'detail-body' }, [
+        h('p', { text: [person.ledger.mode, person.ledger.persistence].filter(Boolean).join(' · ') }),
         person.summary ? h('p', { className: 'profile-summary', text: person.summary }) : '',
         person.profile_text ? h('div', { className: 'profile-text', text: person.profile_text }) : '',
         person.preferences.length ? h('div', { className: 'tag-row' }, person.preferences.map((tag) => h('span', { text: text(tag) }))) : '',
@@ -223,6 +239,8 @@ function renderMain() {
   if (state.active === 'memory') return renderMemory(summary);
   if (state.active === 'people') return renderPeople(summary);
   if (state.active === 'thinking') return renderThinking(summary);
+  if (state.active === 'rhythm') return renderRhythm(h);
+  if (state.active === 'companion') return renderCompanion(h);
   if (state.active === 'roadmap') return renderRoadmap(summary);
   return renderOverview(summary);
 }
@@ -267,7 +285,7 @@ export function createRenderer(events) {
       ]),
       state.error ? h('p', { className: 'error-text', text: state.error }) : '',
       h('div', { className: 'view-stack' }, renderMain()),
-      h('footer', { className: 'progress-dock', 'aria-label': `总进度 ${percent}%` }, [
+      state.active === 'companion' ? '' : h('footer', { className: 'progress-dock', 'aria-label': `总进度 ${percent}%` }, [
         h('div', {}, [h('strong', { text: '总进度' }), h('span', { text: state.summary.progress.updated_at ? `更新于 ${state.summary.progress.updated_at}` : '等待更新' })]),
         h('div', { className: 'dock-track' }, [h('i', { style: `width: ${percent}%` })]),
         h('b', { text: `${percent}%` })

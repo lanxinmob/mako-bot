@@ -13,8 +13,23 @@ from src.services.delivery.observation import observe_group_output, observe_plug
 from .models import AutonomyDecision, PendingAction, TargetType
 from .approval import ApprovalUnavailable
 from .repository import PendingConflict
+from src.services.memory.ledger.runtime import versioned, repository
+
+
+def _subjects(ctx, target_type, target_id):
+    users = [target_id] if target_type == 'private' and target_id else []
+    storage = getattr(ctx, 'storage', None)
+    if repository(storage) is not None:
+        users += [r.user_id for r in storage.get_recent_global_records(hours=getattr(ctx.settings, 'autonomy_context_hours', 24))
+                  if r.user_id is not None]
+        users.append(ctx.settings.autonomy_owner_id)
+    return users
 
 async def ask_owner(ctx, bot: Any, decision: AutonomyDecision) -> bool:
+    view = versioned(getattr(ctx, 'storage', None), decision.memory_versions,
+                     () if decision.memory_versions else _subjects(ctx, decision.target_type, decision.target_id))
+    if view is None or not view.available:
+        return False
     if not decision.target_id or not ctx.policy.target_allowed(decision.target_type, decision.target_id):
         ctx.repository.append_log("ask_owner_rejected", {"reason": "target not allowed", "decision": asdict(decision)})
         return False
@@ -26,6 +41,7 @@ async def ask_owner(ctx, bot: Any, decision: AutonomyDecision) -> bool:
         reason=decision.reason,
         created_at=ctx.clock(),
         intent=decision.intent,
+        memory_versions=decision.memory_versions,
     )
     try:
         persisted = await asyncio.to_thread(ctx.repository.save_pending, pending)
@@ -45,6 +61,7 @@ async def ask_owner(ctx, bot: Any, decision: AutonomyDecision) -> bool:
     scene = "群聊" if pending.target_type == "group" else "私聊"
     acknowledged = await send_to_private(
         bot, ctx.settings.autonomy_owner_id,
+        memory_view=view,
         message=(
             f"茉子有点拿不准，要不要发到{scene} {pending.target_id}？\n"
             f"候选内容：{pending.message}\n"
@@ -75,7 +92,12 @@ async def send_action(ctx,
     intent: str = "other",
     owner_approved: bool = False,
     approval_attempt=None,
+    memory_versions=None,
 ) -> bool:
+    subjects = () if memory_versions else _subjects(ctx, target_type, target_id)
+    view = versioned(ctx.storage, memory_versions, subjects)
+    if view is None or not view.available:
+        return False
     if approval_attempt is None:
         message = align_time_greeting(message)
     if not ctx.policy.target_allowed(target_type, target_id):
@@ -150,9 +172,10 @@ async def send_action(ctx,
         if approval_attempt is not None and not await approval_attempt.begin(message):
             return False
         if target_type == "group":
-            result = await bot.send_group_msg(group_id=target_id, message=rendered)
+            sender = lambda: bot.send_group_msg(group_id=target_id, message=rendered)
         else:
-            result = await bot.send_private_msg(user_id=target_id, message=rendered)
+            sender = lambda: bot.send_private_msg(user_id=target_id, message=rendered)
+        result = await view.send(sender)
         acknowledged = acknowledged_result(result)
         if approval_attempt is not None:
             approval_attempt.acknowledged = acknowledged
@@ -188,7 +211,7 @@ async def send_approved(ctx, bot, store, snapshot, replacement=None):
     try:
         await send_action(ctx, bot, pending.target_type, pending.target_id, message,
                           pending.reason, intent=pending.intent, owner_approved=True,
-                          approval_attempt=attempt)
+                          approval_attempt=attempt, memory_versions=pending.memory_versions)
     finally:
         # Cancellation cannot undo a started Redis operation or external send.
         try:

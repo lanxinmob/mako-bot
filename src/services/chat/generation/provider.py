@@ -8,6 +8,7 @@ from src.services.persistence.generation.store import GenerationStore
 from src.services.persistence.generation.costs import GenerationCosts
 from .invocation import GenerationNotAdmitted, RecordedInvocation
 from .cost_worker import GenerationCostWorker
+from src.services.memory.ledger.generation import provider_entry
 
 
 def summarize_costs(statuses):
@@ -37,8 +38,8 @@ async def call_recorded(storage, settings, messages, *, user_id, phase, max_toke
     async def provider(frozen_messages):
         # SDK-level retries would repeat an unconfirmed billable request.
         api = factory().with_options(max_retries=0)
-        response = await asyncio.wait_for(api.chat.completions.create(
-            model=model, messages=frozen_messages, temperature=0.1, max_tokens=max_tokens), timeout=40.0)
+        response = await asyncio.wait_for(provider_entry(lambda: api.chat.completions.create(
+            model=model, messages=frozen_messages, temperature=0.1, max_tokens=max_tokens)), timeout=40.0)
         return response.choices[0].message.content or ""
 
     result = await invocation.call(provider, messages, user_id=user_id, phase=phase,

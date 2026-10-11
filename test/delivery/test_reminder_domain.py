@@ -42,6 +42,8 @@ class ReminderBookTest(unittest.TestCase):
         first = generate_job_id(1, 2, self.when)
         self.assertEqual(first, generate_job_id(1, 2, self.when))
         self.assertNotEqual(first, generate_job_id(1, 3, self.when))
+        self.assertNotEqual(first, generate_job_id(0, 2, self.when))
+        self.assertNotEqual(generate_job_id(0, 2, self.when), generate_job_id(0, 3, self.when))
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ class GroupEvent:
     direct_call: bool = False
     kind: Literal["chat", "tool", "reminder"] = "chat"
     outbound: bool = False
+    received_ns: int = field(default_factory=time.time_ns)
 
     def __post_init__(self) -> None:
         # Protocol adapters commonly supply integer QQ/message identifiers.

@@ -135,8 +135,7 @@ async def test_redis_outage_cannot_use_in_memory_delivery():
     client = Mock(eval=Mock(side_effect=ConnectionError("offline")))
     service = FollowupDelivery(client, Mock())
     bot = SimpleNamespace(self_id="99", send_private_msg=AsyncMock())
-    with pytest.raises(ConnectionError):
-        await service.deliver(bot, 7, "fixture")
+    assert not await service.deliver(bot, 7, "fixture")
     bot.send_private_msg.assert_not_awaited()
     with pytest.raises(RuntimeError, match="requires Redis"):
         FollowupDelivery(None, Mock())

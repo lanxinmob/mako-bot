@@ -86,5 +86,19 @@ async def mount_dashboard_routes() -> None:
         payload = await asyncio.to_thread(service.get_frontend_summary, limit=limit)
         return JSONResponse(payload, headers=SECURITY_HEADERS)
 
+    @app.get("/mako/dashboard/api/group-rhythm")
+    async def group_rhythm(
+        limit: int = Query(default=50, ge=1, le=200),
+        authorization: Optional[str] = Header(default=None),
+        x_dashboard_token: Optional[str] = Header(default=None),
+    ) -> JSONResponse:
+        _require_dashboard_token(authorization, x_dashboard_token)
+        from src.services.chat.observability.events import store
+        try:
+            payload = store.snapshot(limit)
+        except Exception:
+            raise HTTPException(status_code=503, detail="Group rhythm state unavailable")
+        return JSONResponse(payload, headers=SECURITY_HEADERS)
+
 
 logger.success("茉子 Dashboard 插件已加载，入口 /mako/dashboard")

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from src.services.delivery.dispatcher import OutboundDispatcher
+from src.services.chat.policy import ChatAddress
 from src.services.delivery.reminder_delivery import ReminderDelivery
 from test.autonomy.test_pending_atomic import isolated_redis
 from test.delivery.state.test_reminder_schedule import runtime
@@ -16,9 +17,11 @@ from test.delivery.test_sender_acknowledgement import load_function
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("in_flight", [False, True])
-async def test_delete_cancels_queued_reminder_and_reports_in_flight(isolated_redis, in_flight):
+@pytest.mark.parametrize("target_type", ["group", "private"])
+async def test_delete_cancels_queued_reminder_and_reports_in_flight(isolated_redis, in_flight, target_type):
     lifecycle, scheduler, jobs = runtime(isolated_redis)
-    old = (await lifecycle.create(record(isolated_redis), "99")).mutation.snapshot
+    old = (await lifecycle.create(record(isolated_redis, target_type=target_type), "99")).mutation.snapshot
+    target_id = 7 if target_type == "private" else 1
     dispatcher = OutboundDispatcher(spacing=0)
     entered, release, queued = asyncio.Event(), asyncio.Event(), asyncio.Event()
 
@@ -35,7 +38,8 @@ async def test_delete_cancels_queued_reminder_and_reports_in_flight(isolated_red
         queued.set()
         return await dispatcher.dispatch(kind, target, send, **kwargs)
 
-    bot = SimpleNamespace(self_id="99", send_group_msg=AsyncMock(side_effect=transport))
+    send = AsyncMock(side_effect=transport)
+    bot = SimpleNamespace(self_id="99", send_group_msg=send, send_private_msg=send)
     delivery = ReminderDelivery(isolated_redis, schedule=schedule)
     replies = AsyncMock()
     handle = load_function("src/plugins/chat/reminders.py", "handle_reminder", {
@@ -49,19 +53,21 @@ async def test_delete_cancels_queued_reminder_and_reports_in_flight(isolated_red
     })
     blocker = None
     if not in_flight:
-        blocker = asyncio.create_task(dispatcher.dispatch("group", 1, hold, category="command"))
+        blocker = asyncio.create_task(dispatcher.dispatch(target_type, target_id, hold, category="command"))
         await asyncio.wait_for(entered.wait(), 5)
     task = asyncio.create_task(delivery.deliver(bot, "fixture", old.revision, valid_until_ms=2**52))
     try:
         await asyncio.wait_for(entered.wait() if in_flight else queued.wait(), 5)
-        await handle(object(), SimpleNamespace(user_id=7, group_id=1, self_id="99"),
-                     SimpleNamespace(session_id="group_1"), "delete")
+        event = SimpleNamespace(user_id=7, self_id="99")
+        if target_type == "group":
+            event.group_id = 1
+        await handle(object(), event, ChatAddress(target_type, 7, 1 if target_type == "group" else None), "delete")
     finally:
         release.set()
         await asyncio.wait_for(task, 5)
         if blocker:
             await asyncio.wait_for(blocker, 5)
-    assert bot.send_group_msg.await_count == int(in_flight)
+    assert send.await_count == int(in_flight)
     assert lifecycle.source.load("fixture") is None
     assert ("无法撤回" in replies.call_args.args[2]) is in_flight
     assert not jobs
@@ -83,7 +89,7 @@ async def test_old_acknowledgement_does_not_delete_replacement(isolated_redis):
         return await send()
 
     delivery = ReminderDelivery(isolated_redis, schedule=schedule)
-    callback = load_function("src/plugins/chat/reminders.py", "send_group_reminder", {
+    callback = load_function("src/plugins/chat/reminders.py", "send_reminder", {
         "asyncio": asyncio, "_runtime": AsyncMock(return_value=lifecycle),
         "get_bot": Mock(return_value=bot), "ReminderDelivery": Mock(return_value=delivery), "logger": Mock(),
     })

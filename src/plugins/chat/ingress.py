@@ -11,6 +11,7 @@ from .delivery import message_text, send_reply
 from .reminders import handle_reminder
 from src.services.chat.group.models import GroupEvent
 from src.services.delivery.dispatcher import send_notice, send_to_event
+from src.services.memory.ledger.source import from_event
 
 
 async def observe(event: MessageEvent, bot: Bot, workflow):
@@ -52,18 +53,19 @@ class QQChatTransport:
     def __init__(self, matcher: Matcher, event: MessageEvent, bot: Bot):
         self.matcher, self.event, self.bot = matcher, event, bot
         self.guard = None
+        self.memory_view = None
         self.category = "chat"
         self.on_sent = None
         self.cancel_candidate = lambda: None
 
     async def reply(self, text: str):
         return await send_reply(self.matcher, self.event, self.bot, text,
-                                guard=self.guard, on_sent=self.on_sent, category=self.category)
+                                guard=self.guard, on_sent=self.on_sent, category=self.category, memory_view=self.memory_view)
 
     async def reply_recorded(self, text: str, *, before_send, on_ack):
         return await send_reply(self.matcher, self.event, self.bot, text,
                                 guard=self.guard, on_sent=self.on_sent, category=self.category,
-                                before_send=before_send, on_ack=on_ack)
+                                before_send=before_send, on_ack=on_ack, memory_view=self.memory_view)
 
     async def notice(self, text: str):
         return await send_notice(self.matcher, self.event, Message(text),
@@ -78,6 +80,7 @@ class QQChatTransport:
 
 async def receive(matcher: Matcher, event: MessageEvent, bot: Bot, workflow):
     started_at = time.perf_counter()
+    source = from_event(event, bot)
     normalized = normalize_message(event.get_message())
     text = await message_text(event, bot)
     incoming = ChatInput(
@@ -88,6 +91,7 @@ async def receive(matcher: Matcher, event: MessageEvent, bot: Bot, workflow):
         is_group_admin=getattr(event.sender, "role", "member") in {"admin", "owner"},
         started_at=started_at,
         bot_id=str(bot.self_id), message_id=str(event.message_id),
+        source_ref=source,
         group_memory_observed=(getattr(event, "group_id", None) is not None
                                and workflow.services.settings.record_undirected_group_messages),
     )

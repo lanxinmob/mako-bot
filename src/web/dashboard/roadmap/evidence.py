@@ -73,7 +73,7 @@ TASK_EVIDENCE_OVERRIDES = {
     "foundation-01": "src.models.schemas.BotProfile 定义身份字段，DashboardService._default_profile 提供茉子的默认身份和阶段。",
     "foundation-02": "默认 BotProfile.values 已写入“谨慎、温柔、守边界、有自己的判断”等价值观。",
     "foundation-03": "默认 BotProfile.boundaries 与 autonomy 规则共同限制白名单、隐私、敏感话题和隐藏推理链。",
-    "foundation-07": "src.core.config 中 AUTONOMY_OWNER_ID 默认 0，autonomy.is_owner 只信任该账号。",
+    "foundation-07": "AUTONOMY_OWNER_ID 由部署者配置；autonomy.is_owner 只信任配置的 owner。",
     "foundation-08": "autonomy.should_ask_owner 与 handle_decision 会把中风险或低置信行动转为 owner 确认。",
     "foundation-09": "autonomy.handle_decision 对 high risk 或 confidence < 0.45 直接 silent 并写入事件。",
     "memory-01": "StorageService.list_all_notes 会遍历 notes:* 并返回 NoteRecord，dashboard 将其合并进 memory_notes。",

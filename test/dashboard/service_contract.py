@@ -20,6 +20,7 @@ def deny_external(event, args):
 
 sys.addaudithook(deny_external)
 storage_stub = types.ModuleType("src.services.persistence")
+storage_stub.__path__ = [str(root / 'src/services/persistence')]
 storage_stub.StorageService = Mock(side_effect=AssertionError("real storage forbidden"))
 sys.modules[storage_stub.__name__] = storage_stub
 

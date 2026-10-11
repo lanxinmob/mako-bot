@@ -39,6 +39,7 @@ class ParticipationPolicy:
             "没事了", "不用了", "算了", "不用回复", "不用回了", "再见", "晚安",
             "解决了谢谢", "已经解决了谢谢", "解决了", "已解决", "搞定了谢谢",
             "谢谢不用了", "不用了谢谢", "好了谢谢", "明白了谢谢",
+            "好啦先这样吧", "先这样吧",
         }
 
     def reply_to_other(self, event: GroupEvent, state: GroupState) -> bool:
@@ -57,6 +58,10 @@ class ParticipationPolicy:
             if not lowered.startswith(name):
                 continue
             tail = lowered[len(name):]
+            # A familiar vocative suffix still needs a boundary or request;
+            # narrative mentions such as 茉子酱今天说过 do not become calls.
+            if tail.startswith("酱"):
+                tail = tail[1:]
             if not tail or tail.strip(" ,，:：!！?？~～") == "":
                 return True
             # A vocative boundary or second-person request, never arbitrary

@@ -9,6 +9,7 @@ from src.services.integrations.llm import has_deepseek
 from src.services.integrations.llm import has_openai
 from src.services.memory.image_archive import get_image_archive, MAX_MEMORY_IMAGES
 from .models import ChatInput, ChatServices, ChatTransport, Admission
+from src.services.chat.observability.events import phase
 
 def record_incoming(
     services: ChatServices,
@@ -44,6 +45,7 @@ async def admit(services: ChatServices, incoming: ChatInput, transport: ChatTran
     address = incoming.address
     access = services.governance.can_chat(incoming.address.user_id, address.group_id)
     if not access.allowed:
+        phase(incoming, "finished", "access_rejected")
         logger.info(
             "聊天访问被治理策略拒绝 user_id={} group_id={} reason={}",
             incoming.address.user_id,
@@ -54,6 +56,7 @@ async def admit(services: ChatServices, incoming: ChatInput, transport: ChatTran
             await transport.notice("持久化存储暂时不可用，茉子先不处理消息，避免丢失上下文。")
         return
     if services.settings.llm_required and not (has_deepseek() or has_openai()):
+        phase(incoming, "finished", "provider_unconfigured")
         logger.error("聊天请求被拒绝：生产模式要求配置可用的 LLM")
         await transport.notice("语言模型尚未配置，茉子暂时不能可靠地处理消息。")
         return
@@ -71,6 +74,7 @@ async def admit(services: ChatServices, incoming: ChatInput, transport: ChatTran
             sender_id=incoming.address.user_id,
         )
         if not rhythm.allowed:
+            phase(incoming, "finished", "rhythm_blocked")
             logger.info(
                 "聊天节奏控制保持静默 user_id={} group_id={} reason={}",
                 incoming.address.user_id,

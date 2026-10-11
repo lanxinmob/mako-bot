@@ -1,205 +1,257 @@
 <p align="center">
-    <img src="src/mako.jpg" width="200" height="200" alt="avater">
+  <img src="src/mako.jpg" width="120" alt="Mako-Bot">
 </p>
 
-<div align="center">
-  
-# 🌸 Mako-Bot 
+# Mako-Bot
 
-✨基于 [NoneBot2](https://github.com/nonebot/nonebot2) 和 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) 的 QQ 聊天机器人✨
-</div>
+✨ **让 QQ 中的角色对话，拥有延续下去的记忆。** ✨
 
-<p align="center">
-  <a href="https://github.com/lanxinmob/mako-bot/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
-  </a>
-  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="python">
-</p>
+Mako-Bot 是一个可自行部署的 QQ 角色伙伴，面向私聊和熟悉的小群。
+围绕《千恋万花》中常陆茉子的角色设定，她会参考近期聊天、人物档案与保存的记忆，
+以俏皮、有主见的口吻参与对话，并支持群聊回应节奏、资料检索与定时提醒。
 
-## 📋 最近更新
+部署者可以通过 Web 面板查看保存的记忆、人物档案与自主任务记录。
+基于 [NoneBot2](https://github.com/nonebot/nonebot2)、OneBot V11 与
+[NapCatQQ](https://github.com/NapNeko/NapCatQQ)。
 
-[2026/10/06]
-- 新增小鸟、历史传送和真实期刊查询。小鸟和传送每次随机抽取；支持指定鸟种、时代与地点。
+[![Source license: MIT](https://img.shields.io/badge/source_license-MIT-green)](LICENSE)
+[![CI](https://github.com/lanxinmob/mako-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/lanxinmob/mako-bot/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)](pyproject.toml)
 
-[2026/07/05]
-- 图片处理安全加固：增加下载大小上限、PIL 解码前尺寸校验、用户级速率限制、临时文件自动清理，防止低内存实例 OOM
-- 新增每日健康检查脚本（cron），自动检测服务状态、内存占用、OOM 事件，异常时自动重启
+当前包版本 **0.1.0**，持续开发中。
 
-## 📖 基本介绍
-她的身份是《千恋万花》中常陆茉子：一个有点小恶魔性格、喜欢捉弄人但内心善良的少女忍者。
-拥有统一且持续的记忆，能进行拟人化的陪伴式聊天。
+[体验入口](#体验入口) · [快速开始](#快速开始) · [配置与隐私](#配置资源与费用) · [开发文档](#文档)
 
-主聊天配置为名称包含 `vision` 的 DeepSeek 模型时，图片会与当前问题直接传给模型，
-无需另配图片识别 API。每次最多 3 张，保留下载、尺寸与限频限制。
+## 体验入口
 
-## 🧩 功能特性
-### 已开发功能
-- [x] 小鸟：鸟图、物种资料及图片授权来源
-- [x] 传送：有史实出处的历史背景与原创生活小故事
-- [x] 期刊：真实刊物查询与按近期论文寻找相关期刊
-- [x] 以茉子身份与用户进行聊天
-- [x] 手动查询最新资讯（`精选文章` / `今日新闻` / `日报` / `news`）
-- [x] 查询某地天气
-- [x] 设置修改删除定时提醒
-- [x] 创建、修改、删除定时提醒的功能
-- [x] 回复时引用消息
-- [x] 在服务器上搭建代理服务
+先从这三件事了解茉子。下面是测试输入示例，具体步骤与核对方法见[首次体验](docs/FIRST_RUN.md)。
 
-#### 群聊里的三个小功能
+| 想体验什么 | 从哪里开始 | 怎样核对 |
+| --- | --- | --- |
+| 对话有延续 | 私聊说“我喜欢乌龙茶”，再用 `/关系记忆` 查看 | 核对保存的偏好，也可以纠正；超出近期历史后再聊相关话题 |
+| 群聊有回应节奏 | 在测试群观察普通闲聊，再 @ 茉子发起对话 | 连续观察回应与沉默，感受不同话题和多人发言时的频率与时机 |
+| 提醒确实执行 | 私聊说“五分钟后提醒我喝水”，或在测试群 @ 茉子 | 用 `/我的提醒` 核对时间和内容，再确认到时实际收到消息 |
 
-| 命令 | 用法 |
+## 为什么使用 Mako-Bot
+
+- **让互动积累下来**：除了近期对话，也保存用户偏好、关系事件和人物档案，供后续回复参考。
+- **给群聊留出空间**：明确呼叫和普通闲聊分别判断，结合会话节奏选择是否回应。
+- **让保存与执行看得见**：自己可在私聊解释、纠正和遗忘关系记忆；部署者可在面板查看来源与运行状态，提醒另有查询命令。
+
+私聊可用 `解释记忆 ID`、`纠正记忆 ID 现在不喜欢乌龙茶了`、`忘掉记忆 ID`。
+更正生成新 ID；遗忘清空同主题账本和镜像，停止相关跟进。首次更正或遗忘后，
+旧整段画像与无来源向量暂停用于相关回复；历史聊天和备份仍保留。
+只有 `重新记住 ID 我喜欢乌龙茶` 可以明确恢复已遗忘主题，普通重述不会自动恢复。
+
+启用 `companion` 插件后，可在本人私聊创建一个考试计划，填写 1–3 个任务和准确的北京时间。
+计划最多发送一次考前提醒和一次本人明确同意的考后回顾邀请；不回复时保持安静。
+用 `我的考试计划` 核对状态，`取消计划 ID` 停止后续动作，`忘掉计划 ID` 清除关联正文。
+完整格式与授权边界见[考试陪伴命令](docs/COMMANDS.md#考试陪伴)。
+
+适合愿意维护 QQ 接入、存储与模型配置的个人部署者，以及希望研究角色对话与记忆流程的开发者。
+当前角色由[代码中的提示词](src/core/prompts.py)定义；更换角色需要修改提示词，尚无现成的多角色切换配置。
+
+## 核心能力
+
+| 能力 | 实际用途 |
 | --- | --- |
-| `小鸟` | 随机遇见一只鸟；`小鸟 麻雀` 或 `小鸟 Passer montanus` 查询物种 |
-| `传送` | 随机历史小故事；`传送 唐朝` / `传送 埃及` 筛选；`传送 再来` 换一站 |
-| `期刊 Nature` | 查刊名；`期刊 1932-6203` 按 ISSN 查真实刊物 |
-| `发表` / `投稿` | 每日真实期刊；`投稿 machine learning` 按近期相关文章寻找刊物 |
-| `/help` | 查看命令示例 |
-| `人物档案` | 仅 owner：显示档案总数和最近更新的前 5 人；`人物档案 ID` / `人物档案 名称` 查看完整档案 |
+| 角色对话 | 以茉子的角色身份持续聊天，并参考近期对话；群聊根据规则和节奏决定是否回应 |
+| 记忆与人物档案 | 保存偏好与关系事件，每日从过往记录整理人物信息和重要事件，供后续对话使用 |
+| 工具与检索 | 查询天气、网页和资讯，保存笔记，在私聊或群聊设置提醒；可按会话配置工具权限和调用限制 |
+| 图片理解 | 配置支持的视觉服务后，在聊天中讨论图片内容；每条消息最多处理 3 张 |
+| 发送状态 | 区分生成、发送确认与历史补记，帮助部署者排查未送达和待核对结果 |
+| Web 面板 | 通过受 token 保护的数据接口查看记忆、人物档案、自主任务及运行摘要 |
 
-支持在命令前加昵称或 @机器人；参数与命令之间用空格。这些功能只响应明确命令，
-不调用付费模型，图文合成一次发送。同一人三秒内重复同一命令会静默忽略，
-其他命令保留并按现有发送队列限频。
+还有一些日常小工具：`小鸟 麻雀` 查看鸟种与带授权说明的图片，`传送 唐朝` 阅读历史背景与原创生活小故事，
+`期刊 Nature` 查询真实刊物。这三个明确命令路径不调用付费模型，其他聊天与整理流程仍可能产生模型费用。
+完整命令与要求见[使用说明](docs/COMMANDS.md)。
 
-已确认送达的插件消息按机器人和会话单独保存最近 20 条，供后续聊天引用，
-不挤占普通聊天的 20 轮历史。Redis 不可用时暂存于内存，重启后未持久化的记录会丢失。
+## 快速开始
 
-人物档案由 `precipitate_knowledge` 插件提供，仅 `AUTONOMY_OWNER_ID` 指定的 QQ 用户可查；
-群里调用也只私聊返回。同名时列出 ID 供选择；旧命令 `可塑性记忆` / `memory` 同样只限 owner。
+> **数据记录说明：** 默认记录允许群聊中的消息，包括未 @ 机器人的发言，用于后续记忆整理。
+> 设置 `RECORD_UNDIRECTED_GROUP_MESSAGES=false` 可关闭被动记录。
+> 启用前请了解[记录、模型发送与记忆范围](docs/CONFIGURATION.md#记忆与数据记录)，并告知参与者。
 
-默认插件清单已包含 `discoveries`。若设置了 `PLUGIN_ENABLE_LIST`，需将
-`discoveries` 加入该清单。已有工具白名单需分别允许 `discoveries.bird`、
-`discoveries.journey`、`discoveries.journal`、`discoveries.help`；禁用名单与黑名单仍生效。
-全局 `TOOL_ENABLE_LIST` / `TOOL_DISABLE_LIST` 和群/私聊的工具名单均会检查；发送前再次核对权限。
+本页使用 **本机 Python + Docker Redis Stack + 独立 NapCat**，适合能分别维护这三个组件的部署者。
+需要 Python、Docker、可用的模型服务，以及能下载嵌入模型和访问资料来源的网络。
+以下配置与命令已按仓库实现核对，尚无公开的整套真实 QQ 部署验收记录。
+容器部署与跨主机连接见[部署文档](docs/DEPLOYMENT.md)。
 
-小鸟从 iNaturalist 鸟种资料中抽取有可复用图片的物种；在线资料不可用时使用两种已核对的离线鸟图。
-小鸟和传送按用户打乱轮换，同一候选池抽完后再循环；重启清空轮换记录，筛选后只有一项时仍会重复。
-鸟图注明物种、来源和授权；历史背景与虚构故事分开标注；期刊提供 Crossref
-记录和论文 DOI，没有可靠数据的分区、影响因子和版面费不填写。期刊主题检索
-用于发现相关刊物，最终仍需阅读刊物官网的范围和投稿要求。
-#### RAG（检索增强生成）
-群消息默认在回复判断前写入记忆，包括未 @茉子的闲聊和插件命令；记录本身不会触发回复。
-黑名单中的用户和群仍被排除。群聊和私聊中的图片每条最多保存 3 张，后台下载到
-`data/memory_images/`，记录中保留引用；每日整理将实际图片与发送者、群号及文字上下文
-一起交给视觉模型，用于重要事件提炼和人物档案更新。下载失败的图片明确标为不可见，不猜测内容。
-图片不挤占普通聊天轮数；原始记录淘汰后，相关文件在每日整理时清理。语音等仍只保存类型标记。
-每日北京时间 22:00 分批整理过去 24 小时的记录，提炼重要事件并更新有发言用户的档案。
-全局原始记录保留上限由 `GLOBAL_MEMORY_MAX_RECORDS` 控制（默认 50,000 条）；
-设置 `RECORD_UNDIRECTED_GROUP_MESSAGES=false` 可关闭全部群消息记录，恢复仅保存聊天接纳的消息。
-
-- [x] 每天通过聊天记录建立或更新用户画像个人档案
-- [x] 茉子每日日记，记录有趣或重要事件
-- [x] 根据以上两个及当前聊天的上下文生成茉子的回复
-### 待开发功能
-- [ ] 图片相关功能
-- [ ] 语言相关功能
-- [ ] 识别表情含义
-- [ ] 加入好感度设计
-- [ ] 可以识别链接，使用 Ollama Web Search 搜索
-- [ ] 手动设置笔记功能
-- [ ] 高德查询功能
-
-#### 可以做到
-* 🎭 **身份锁定**：永远保持常陆茉子的人设，不会被用户指令改变。
-* 🗨️ **多轮对话**：记住上下文，持续、自然的聊天体验。
-* 📝 **知识沉淀 (RAG)**：
-  * 记录用户画像（核心特质 / 行为模式 / 关系定位 / 茉子认知画像）
-  * 存储群聊中的重要事件、通用知识，建立向量数据库
-  * 结合画像 + 记忆 + 历史对话生成更贴合的回复
-
-
-## ⚙️ 架构说明
-
-整体分为 **消息接入层**（NapCatQQ）+ **逻辑层**（NoneBot2 + 插件）+ **记忆与知识存储**（Redis + 向量数据库）：
-
-```
-┌───────────────┐
-│    QQ 客户端   │
-└───────▲───────┘
-        │
-        │ NTQQ 协议
-        │
-┌───────┴─────────┐     反向 WebSocket     ┌──────────────┐
-│    NapCatQQ     │◀──────────────────────▶│   NoneBot2   │
-└──────────────────┘                         └───────▲──────┘
-                                                   │ 插件机制
-                                                   │
-                                    ┌──────────────┴──────────────┐
-                                    │    chat / scheduler / …     │
-                                    └─────────────────────────────┘
-```
-
-* **NapCatQQ**：实现 NTQQ 协议，连接 QQ 并接收/发送消息，内置 OneBot V11 协议支持，与 NoneBot2 对接。
-* **NoneBot2**：核心框架，负责插件管理与事件分发。
-* **Redis**：存储用户画像、群聊记忆、向量知识库。
-使用 NapCatQQ 作为 QQ 协议实现。
-
-## 🚀 快速开始
-
-### 1. 克隆项目
+### 1. 获取并安装项目
 
 ```bash
 git clone https://github.com/lanxinmob/mako-bot.git
 cd mako-bot
+python -m venv .venv
 ```
 
-### 2. 安装依赖
+激活虚拟环境：
+
+| 平台 | 命令 |
+| --- | --- |
+| Windows PowerShell | `.venv\Scripts\Activate.ps1` |
+| Linux / macOS | `source .venv/bin/activate` |
 
 ```bash
-pip install -r requirements.txt
+python -m pip install .
 ```
 
-### 3. 运行 RedisStack
+### 2. 启动Redis Stack
+
+向量记忆依赖RediSearch，因此使用与部署文件一致的Redis Stack版本：
 
 ```bash
-docker run -d --name redis-stack -p 6379:6379 -p 8001:8001 redis/redis-stack:latest
+docker run -d --name mako-redis -p 127.0.0.1:6379:6379 -v mako-redis-data:/data redis/redis-stack-server:7.4.0-v3 redis-stack-server --appendonly yes
 ```
 
-### 4. 配置环境变量 `.env`
+### 3. 配置模型与连接
 
-```ini
-# NoneBot 配置
+首次配置时复制公开模板，随后编辑新建的 `.env`。下列命令使用独占创建，
+已有 `.env` 时会报 `FileExistsError` 并保留原文件，此时直接编辑原配置：
+
+```bash
+python -c "from pathlib import Path; template = Path('.env.example').read_bytes(); target = Path('.env').open('xb'); target.write(template); target.close()"
+```
+
+模板中的 `GROUP_ID` 与 `AUTONOMY_OWNER_ID` 是可选整数；暂不使用时注释或删除对应行，不能留空。
+以下字段是本路径需要确认的内容，模型地址和名称应填写你实际使用的服务配置：
+
+```dotenv
 HOST=127.0.0.1
 PORT=8080
+ONEBOT_ACCESS_TOKEN=replace-with-your-onebot-token
+REDIS_URL=redis://127.0.0.1:6379/0
 
-# QQ / NapCatQQ 配置
-QQ_ID=你的QQ号
+DEEPSEEK_API_KEY=replace-with-your-api-key
+DEEPSEEK_BASE_URL=https://your-provider.example/v1
+DEEPSEEK_MODEL=your-model-name
 
-# 模型配置
-GEMINI_API_KEY =''
-DEEPSEEK_API_KEY=''
-
-# 消息、天气查询配置
-GROUP_ID = ""
-your_api_host = ""
-your_api = ""
-tianxin_key = ''
+PLUGIN_ENABLE_LIST=chat,health,discoveries,dashboard,scheduler,precipitate_knowledge
+RECORD_UNDIRECTED_GROUP_MESSAGES=false
 ```
 
-### 5. 安装插件
+示例值需要替换。这里先关闭被动群消息记录，聊天流程接纳的消息仍可保存；了解记录范围后再决定是否开启。
+显式插件清单启用聊天、健康检查、小功能、Dashboard、资讯命令与每日记忆整理，
+并避开当前默认清单中已删除模块的引用，详见[插件配置](docs/CONFIGURATION.md#插件与工具)。
+模型入口的能力范围见[模型接入说明](docs/CONFIGURATION.md#模型接入范围)。
+
+### 4. 启动并连接QQ
+
+在项目根目录运行：
+
+```bash
+mako-bot
 ```
-nb plugin install nonebot-plugin-apscheduler
-nb plugin install nonebot_plugin_lagrange
+
+启动NapCat并登录QQ，在其OneBot V11连接配置中启用**反向WebSocket**：
+
+- 地址：`ws://127.0.0.1:8080/onebot/v11/ws`
+- token：与 `ONEBOT_ACCESS_TOKEN` 相同
+
+上述地址适用于NapCat与机器人在同一主机直接运行的情况。
+NapCat在容器或其他主机时，按[连接拓扑](docs/DEPLOYMENT.md#连接napcat)配置可达地址。
+
+### 5. 完成第一次验证
+
+在另一个终端检查就绪状态：
+
+```bash
+python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=5).read().decode())"
 ```
 
-### 6. 启动机器人
+正常情况下返回：
+
+```json
+{"status":"ready","checks":{"redis":"ok","llm":"configured"}}
 ```
-nb run
+
+这表示Redis可访问、模型凭据已配置；它不验证模型请求和QQ连接。
+再向机器人私聊发送 `/help` 检查命令收发，发送一句普通问候检查模型对话。
+群聊可使用@机器人明确发起对话。失败时按[排查顺序](docs/DEPLOYMENT.md#启动与连接排查)检查。
+
+能回复以后，按[首次体验](docs/FIRST_RUN.md)核对一条保存的偏好、一次群聊回应过程和一项实际送达的提醒。
+
+可选：设置至少32字符的 `DASHBOARD_TOKEN`，打开
+`http://127.0.0.1:8080/mako/dashboard`，在页面中输入token查看数据。
+
+## 配置、资源与费用
+
+| 你需要决定什么 | 当前情况与入口 |
+| --- | --- |
+| 使用哪种模型 | 主聊天优先使用 `DEEPSEEK_*` 配置，也有 OpenAI 备用入口；每日整理和提醒解析使用 `DEEPSEEK_*`。图片输入另有要求，见[接入范围](docs/CONFIGURATION.md#模型接入范围) |
+| 记录哪些消息 | 应用默认启用被动群消息记录，本页示例先关闭；不同记忆类型的共享与删除范围见[数据说明](docs/CONFIGURATION.md#记忆与数据记录) |
+| 准备多少资源 | 首次使用向量功能可能下载嵌入模型。尚无统一最低配置或峰值内存实测；Compose 的 4g / 2 CPU 是机器人容器上限，见[部署说明](docs/DEPLOYMENT.md#docker-compose) |
+| 如何估算费用 | 对话、提醒解析、图片处理与每日整理都可能调用模型；整理量还受记录消息数影响。应用预算不等于供应商账单，见[预算配置](docs/CONFIGURATION.md#回复预算与自主行动) |
+
+仓库尚无逐模型的端到端兼容性报告及按消息量统计的费用基准，选用兼容接口后仍需验证实际能力。
+
+## 设计概览
+
+Mako-Bot 采用 Python 异步单体应用。一条 QQ 消息先经过接纳判断，再选择上下文、记忆与工具，
+生成回复后交给发送调度器。Web 面板通过查询服务读取存储；NapCat、Redis Stack 与模型服务在进程外运行。
+
+```mermaid
+flowchart LR
+    QQ["QQ 群聊 / 私聊"] <--> NapCat["NapCatQQ"]
+    NapCat <-->|OneBot V11| Bot["NoneBot2 / 插件入口"]
+    Bot --> Chat["接纳 → 上下文与工具 → 生成"]
+    Chat --> Delivery["发送调度 / 确认与补记"]
+    Delivery --> Bot
+    Chat --> Storage["存储服务 / Repository"]
+    Delivery --> Storage
+    Storage <--> Redis["Redis Stack / 向量与业务状态"]
+    Chat <--> APIs["模型服务 / 外部 API"]
+    Web["FastAPI / Dashboard"] --> Query["面板查询服务"] --> Storage
 ```
-### 7. 启动 NapCatQQ
 
-运行 NapCatQQ 或 Docker 容器，扫码登录 QQ。
+- **记忆分层**：近期历史保留对话连续性，关系记忆与人物档案保存用户信息，向量检索补充相关事件；各层的范围见配置文档。
+- **回应经过多次判断**：接纳、工具权限与发送前检查分别执行，减少无效候选进入实际群聊；自主行动与主动跟进默认关闭。
+- **生成与送达分开记录**：模型已生成不代表消息已发出，主消息、附件与历史补记各自保存状态；未知结果保留核对。
 
-##  系统提示词（System Prompt）
+模块职责、详细数据流与恢复边界见[架构说明](docs/ARCHITECTURE.md)。
 
-机器人拥有固定人设提示词：
+## 文档
 
-> 你是千恋万花中的常陆茉子，一个有点小恶魔性格、喜欢捉弄人但内心善良的女生，拥有统一且持续的现世记忆……
+| 文档 | 内容 |
+| --- | --- |
+| [首次体验](docs/FIRST_RUN.md) | 关系记忆、群聊节奏与提醒的测试输入和核对方式 |
+| [部署与排障](docs/DEPLOYMENT.md) | 本机与Docker Compose部署、NapCat连接、探针和持久化 |
+| [配置](docs/CONFIGURATION.md) | 模型、插件、记忆记录、权限、预算和Dashboard |
+| [命令与使用](docs/COMMANDS.md) | 小功能、提醒、记忆查询及所需插件 |
+| [架构](docs/ARCHITECTURE.md) | 模块职责、数据流、存储和发送状态 |
+| [第三方许可](docs/THIRD_PARTY_NOTICES.md) | 依赖、模型、协议端与素材的授权边界 |
+| [更新记录](docs/CHANGELOG.md) | 已记录的功能变化 |
 
-确保无论何种情况都不会脱离“常陆茉子”的身份，保持俏皮可爱的语气，并能认真深入地回答问题。
+## 开发与贡献
 
-💡 茉子就在那里等待着你的第一声问候！
+开发依赖和检查方式：
 
-### 鸣谢 
-- [nonebot_plugin-apscheduler](https://github.com/nonebot/plugin-apscheduler)
-- [nonebot_plugin_lagrange](https://github.com/Lonely-Sails/nonebot-plugin-lagrange)
-- [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest -q
+git diff --check
+```
+
+测试应使用合成消息与隔离的存储，不连接生产QQ会话；
+测试结果不等于真实QQ环境的完整验证。
+
+欢迎提交问题和改进。问题报告请包含Python版本、部署方式、复现步骤与已脱敏错误信息；
+修改配置、存储格式、权限或发送行为时，请说明兼容性与验证范围。
+
+近期优先完善首次部署与诊断、记忆范围与管理，以及模型兼容性和真实运行验证。
+可以从这些具体贡献开始：
+
+- **验证一条部署路径**：记录系统、Python 版本与 NapCat 拓扑，检查安装、连接及首次体验步骤。
+- **验证一个模型配置**：分别测试文字、图片、提醒解析与每日整理，记录接口能力、项目版本和失败条件。
+- **补充记忆范围测试**：使用合成用户与隔离存储，覆盖跨群、私聊、同名用户，以及纠正和删除后的读取。
+
+## LICENSE
+
+作者拥有版权的源码与原创文档采用 **[MIT License](LICENSE)**；分发时保留版权声明和许可全文。
+
+第三方组件、模型与角色素材遵守各自授权。默认嵌入模型
+[`moka-ai/m3e-base`](https://huggingface.co/moka-ai/m3e-base#-license) 限非商用、研究用途，
+[NapCat](https://github.com/NapNeko/NapCatQQ/blob/main/LICENSE) 也含非商用等限制。
+完整部署的许可范围见[第三方说明](docs/THIRD_PARTY_NOTICES.md)。
+
+感谢NoneBot2、OneBot适配器、APScheduler、NapCat及相关开源依赖。

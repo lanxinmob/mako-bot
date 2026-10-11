@@ -307,9 +307,10 @@ async def send_to_group(bot, group_id: int, message, *, category: Category = "au
 
 
 async def send_to_private(bot, user_id: int, message, *, category: Category = "command",
-                          guard: Guard | None = None, notice_key: str | None = None) -> bool:
+                          guard: Guard | None = None, notice_key: str | None = None, memory_view=None) -> bool:
     async def send():
-        result = await bot.send_private_msg(user_id=user_id, message=message)
+        sender = lambda: bot.send_private_msg(user_id=user_id, message=message)
+        result = await memory_view.send(sender) if memory_view else await sender()
         acknowledged = acknowledged_result(result)
         if acknowledged:
             observe_plugin_output(getattr(bot, "self_id", None), "private", user_id,

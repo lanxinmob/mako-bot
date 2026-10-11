@@ -18,7 +18,23 @@ class RelationshipService:
         self.settings = get_settings()
         self.storage = storage or StorageService()
 
+    async def absorb_incoming(self, incoming):
+        from .ledger import LedgerService
+        from .ledger.facts import fact
+        text = incoming.normalized.plain_text
+        found = fact(text)
+        if not found or not incoming.source_ref:
+            return []
+        if found['memory_type'] == 'preference' and not text.strip().startswith(('我', '以前喜欢')):
+            return []
+        due = self._parse_due_time(text) if found['memory_type'] == 'promise' else None
+        return await LedgerService(self.storage).mutate(incoming.address.user_id, 'auto', None,
+                                                       text, incoming.source_ref, due_at=due)
+
     def absorb_user_message(self, user_id: int, nickname: str, text: str) -> List[RelationshipMemory]:
+        # Legacy synchronous entry cannot manufacture a trusted event identity.
+        if not getattr(self.storage.backend, 'ledger_legacy_test', False):
+            return []
         text = text.strip()
         if not text:
             return []
@@ -72,6 +88,9 @@ class RelationshipService:
         return created
 
     def build_memory_brief(self, user_id: int, limit_each: int = 3) -> str:
+        from .ledger.runtime import for_storage
+        if not for_storage(self.storage, [user_id]).available:
+            return '个人记忆暂不可用。'
         preferences = self.storage.list_relationship_memories(
             user_id, memory_type="preference", status="active", limit=limit_each
         )
@@ -110,7 +129,7 @@ class RelationshipService:
         }
         lines = ["茉子当前只为你保存了这些关系记忆："]
         for memory in memories:
-            status = "有效" if memory.status == "active" else "已完成"
+            status = {'active': '有效', 'done': '已完成', 'replaced': '已替换', 'forgotten': '已遗忘'}[memory.status]
             lines.append(
                 f"- {memory.memory_id}｜{labels.get(memory.memory_type, memory.memory_type)}｜"
                 f"{status}｜{memory.content}"
@@ -126,6 +145,8 @@ class RelationshipService:
         *,
         nickname: str,
     ) -> Optional[RelationshipMemory]:
+        if not getattr(self.storage.backend, 'ledger_legacy_test', False):
+            return None
         content = content.strip()
         if not content:
             return None
@@ -141,6 +162,8 @@ class RelationshipService:
         return updated
 
     def delete_memory(self, user_id: int, memory_id: str, *, nickname: str) -> bool:
+        if not getattr(self.storage.backend, 'ledger_legacy_test', False):
+            return False
         deleted = self.storage.delete_relationship_memory(user_id, memory_id)
         if not deleted:
             return False

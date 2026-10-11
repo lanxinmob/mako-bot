@@ -26,18 +26,18 @@ def runtime(client):
 
 
 @pytest.mark.asyncio
-async def test_registration_failure_keeps_durable_intent_and_restart_restores(isolated_redis):
+@pytest.mark.parametrize("target_type", ["group", "private"])
+async def test_registration_failure_keeps_durable_intent_and_restart_restores(isolated_redis, target_type):
     service, scheduler, jobs = runtime(isolated_redis)
-    add = scheduler.add_job.side_effect
     scheduler.add_job.side_effect = RuntimeError("scheduler unavailable")
-    change = await service.create(record(isolated_redis), "99")
+    change = await service.create(record(isolated_redis, target_type=target_type), "99")
     assert change.mutation.ok and not change.cache_confirmed
     saved = service.source.load("fixture")
-    scheduler.add_job.side_effect = add
-    await service.restore()
-    assert jobs["fixture"].args[1] == saved.revision
-    assert jobs["fixture"].run_date.timestamp() == saved.record.remind_time.timestamp()
-    assert service.source.load("fixture") == saved
+    restarted, _, restored_jobs = runtime(isolated_redis)
+    await restarted.restore()
+    assert restored_jobs["fixture"].args[1] == saved.revision
+    assert restored_jobs["fixture"].run_date.timestamp() == saved.record.remind_time.timestamp()
+    assert restarted.source.load("fixture") == saved
 
 
 @pytest.mark.asyncio

@@ -97,6 +97,7 @@ def list_retained_reminders(client, cursor="0:0", *, limit=10):
                 reminder = ReminderRecord.model_validate_json(raw)
                 if reminder.reminder_id != job_id:
                     raise ValueError("identity mismatch")
+                target_type, target_id = reminder.delivery_target
             except Exception:
                 rows.append(LegacyEntry(job_id[:80], "invalid_source"))
                 continue
@@ -105,7 +106,7 @@ def list_retained_reminders(client, cursor="0:0", *, limit=10):
             if revision and not overdue:
                 continue
             status = "legacy_unverified" if not revision else "overdue_check_action"
-            rows.append(LegacyEntry(job_id, status, f"group:{reminder.group_id}",
+            rows.append(LegacyEntry(job_id, status, f"{target_type}:{target_id}",
                                     reminder.remind_time.isoformat()))
         return LegacyPage(tuple(rows), next_cursor)
     except Exception as exc:

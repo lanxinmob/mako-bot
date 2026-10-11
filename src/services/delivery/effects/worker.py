@@ -22,7 +22,12 @@ class EffectWorker:
             return "not_claimed"
         retry = False
         try:
-            outcome = await asyncio.to_thread(self.targets.apply, lease)
+            if lease.spec.kind == 'companion':
+                from src.services.memory.ledger.runtime import critical, confirmed_thread
+                async with critical():
+                    outcome = await confirmed_thread(self.targets.apply, lease)
+            else:
+                outcome = await asyncio.to_thread(self.targets.apply, lease)
         except EffectUnavailable:
             outcome, retry = "unavailable", True
         except EffectConflict:

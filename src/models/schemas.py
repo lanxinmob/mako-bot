@@ -58,9 +58,18 @@ class ReminderRecord(BaseModel):
     remind_time: datetime
     created_at: datetime = Field(default_factory=datetime.now)
 
+    @property
+    def delivery_target(self) -> tuple[str, int]:
+        # Keep the existing stored fields; zero denotes no group in a private session.
+        if self.group_id > 0:
+            return "group", self.group_id
+        if self.group_id == 0 and self.user_id > 0 and self.session_id == f"private_{self.user_id}":
+            return "private", self.user_id
+        raise ValueError("invalid reminder delivery target")
+
 
 RelationshipType = Literal["event", "preference", "taboo", "promise"]
-RelationshipStatus = Literal["active", "done"]
+RelationshipStatus = Literal["active", "done", "replaced", "forgotten"]
 
 
 class RelationshipMemory(BaseModel):
@@ -75,6 +84,15 @@ class RelationshipMemory(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now)
     due_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
+    revision: int = 0
+    subject_key: str = ""
+    source_ref: dict = Field(default_factory=dict)
+    source_excerpt: str = ""
+    evidence_kind: Literal["explicit", "user_correction", "legacy_unknown"] = "legacy_unknown"
+    replaces: Optional[str] = None
+    replaced_by: Optional[str] = None
+    control_revision: int = 0
+    mirror_note_id: Optional[str] = None
 
 
 ProfileStatus = Literal["active", "archived"]

@@ -14,15 +14,18 @@ from src.services.persistence.reminder_state import (
 from test.autonomy.test_pending_atomic import isolated_redis
 
 
-def record(client, job_id="fixture", content="body", delta=3600):
+def record(client, job_id="fixture", content="body", delta=3600, *, target_type="group"):
     seconds, _ = client.time()
-    return ReminderRecord(reminder_id=job_id, session_id="group_1", user_id=7, group_id=1,
+    return ReminderRecord(reminder_id=job_id,
+                          session_id="private_7" if target_type == "private" else "group_1",
+                          user_id=7, group_id=0 if target_type == "private" else 1,
                           content=content, remind_time=datetime.fromtimestamp(seconds) + timedelta(seconds=delta))
 
 
 def execution(snapshot):
     item = snapshot.record
-    spec = DeliverySpec("reminder", snapshot.intent["bot_id"], "group", str(item.group_id),
+    target_type, target_id = item.delivery_target
+    spec = DeliverySpec("reminder", snapshot.intent["bot_id"], target_type, str(target_id),
                         item.reminder_id, snapshot.revision, item.content, 2**52,
                         "reminders", item.reminder_id, snapshot.digest, REVISION_KEY)
     return spec

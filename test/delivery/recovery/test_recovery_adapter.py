@@ -39,6 +39,8 @@ def test_actual_recovery_policy_disables_retired_periodic_tasks():
                             period.isoformat(), "{}", period_deadline(period, timezone.utc))
     followup = replace(periodic, kind="followup", target_type="private", business_id="memory")
     runner = factory(object(), settings)
+    assert runner.allowed(replace(periodic, kind="reminder"))
+    assert runner.allowed(replace(followup, kind="reminder"))
     assert not runner.allowed(periodic) and not runner.allowed(followup)
     settings.plugin_enable_list = ""
     runner = factory(object(), settings)
@@ -50,6 +52,11 @@ def test_actual_recovery_policy_disables_retired_periodic_tasks():
     assert not runner.allowed(replace(periodic, business_id="unregistered_task"))
     settings.proactive_enabled = False
     assert not runner.allowed(followup)
+    companion = replace(followup, kind='companion')
+    assert runner.allowed(companion) and 'companion' in runner.handlers
+    assert not runner.allowed(replace(companion, target_type='group'))
+    settings.plugin_enable_list = 'chat'
+    assert not factory(object(), settings).allowed(companion)
 
 
 @pytest.mark.asyncio

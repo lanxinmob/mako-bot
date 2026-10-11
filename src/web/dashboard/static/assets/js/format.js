@@ -104,7 +104,8 @@ export function normalizePerson(person, index) {
     notes: asArray(person.notes || person.memories || person.tags),
     relationship_memories: asArray(person.relationship_memories || person.relationships),
     memory_count: Number(person.memory_count || 0),
-    last_updated: person.last_updated || person.updated_at || ''
+    last_updated: person.last_updated || person.updated_at || '',
+    ledger: person.ledger || {}
   };
 }
 
@@ -127,6 +128,15 @@ export function normalizeNote(note, index, type = 'note') {
   }
   return {
     id: note.id || note.key || `${type}-${index}`,
+    ledger: note.ledger || {},
+    memory_status: note.status || '',
+    source_excerpt: note.source_excerpt || '',
+    source_ref: note.source_ref || {},
+    evidence_kind: note.evidence_kind || 'legacy_unknown',
+    memory_id: note.memory_id || note.id || '',
+    confidence_label: note.confidence_label || '',
+    replaces: note.replaces || '',
+    replaced_by: note.replaced_by || '',
     title: note.title || note.topic || note.name || note.target_label || note.type || note.trace_type || `${type === 'memory' ? '记忆' : '笔记'} ${index + 1}`,
     body: note.body || note.text || note.content || note.summary || note.final_output || '',
     date: note.date || note.created_at || note.updated_at || note.time || '',
