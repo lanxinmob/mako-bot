@@ -1,10 +1,16 @@
 <p align="center">
-  <img src="src/mako.jpg" width="120" alt="Mako-Bot">
+  <img src="src/mako.jpg" width="240" alt="Mako-Bot">
 </p>
 
-# Mako-Bot
+<h1 align="center">Mako-Bot</h1>
 
-✨ **让 QQ 中的角色对话，拥有延续下去的记忆。** ✨
+<p align="center">
+  ✨ <strong>让 QQ 中的角色对话，拥有延续下去的记忆。</strong> ✨
+</p>
+
+<p align="center">
+  <a href="README.md">中文</a> · <a href="README_EN.md">English</a>
+</p>
 
 Mako-Bot 是一个可自行部署的 QQ 角色伙伴，面向私聊和熟悉的小群。
 围绕《千恋万花》中常陆茉子的角色设定，她会参考近期聊天、人物档案与保存的记忆，
@@ -14,13 +20,19 @@ Mako-Bot 是一个可自行部署的 QQ 角色伙伴，面向私聊和熟悉的�
 基于 [NoneBot2](https://github.com/nonebot/nonebot2)、OneBot V11 与
 [NapCatQQ](https://github.com/NapNeko/NapCatQQ)。
 
-[![Source license: MIT](https://img.shields.io/badge/source_license-MIT-green)](LICENSE)
-[![CI](https://github.com/lanxinmob/mako-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/lanxinmob/mako-bot/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)](pyproject.toml)
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/source_license-MIT-green" alt="Source license: MIT"></a>
+  <a href="https://github.com/lanxinmob/mako-bot/actions/workflows/ci.yml"><img src="https://github.com/lanxinmob/mako-bot/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-%3E%3D3.10-blue" alt="Python &gt;=3.10"></a>
+</p>
 
-当前包版本 **0.1.0**，持续开发中。
 
-[体验入口](#体验入口) · [快速开始](#快速开始) · [配置与隐私](#配置资源与费用) · [开发文档](#文档)
+<p align="center">
+  <a href="#体验入口">体验入口</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#配置资源与费用">配置与隐私</a> ·
+  <a href="#文档">开发文档</a>
+</p>
 
 ## 体验入口
 
@@ -74,7 +86,6 @@ Mako-Bot 是一个可自行部署的 QQ 角色伙伴，面向私聊和熟悉的�
 
 本页使用 **本机 Python + Docker Redis Stack + 独立 NapCat**，适合能分别维护这三个组件的部署者。
 需要 Python、Docker、可用的模型服务，以及能下载嵌入模型和访问资料来源的网络。
-以下配置与命令已按仓库实现核对，尚无公开的整套真实 QQ 部署验收记录。
 容器部署与跨主机连接见[部署文档](docs/DEPLOYMENT.md)。
 
 ### 1. 获取并安装项目
@@ -180,7 +191,7 @@ python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1
 | --- | --- |
 | 使用哪种模型 | 主聊天优先使用 `DEEPSEEK_*` 配置，也有 OpenAI 备用入口；每日整理和提醒解析使用 `DEEPSEEK_*`。图片输入另有要求，见[接入范围](docs/CONFIGURATION.md#模型接入范围) |
 | 记录哪些消息 | 应用默认启用被动群消息记录，本页示例先关闭；不同记忆类型的共享与删除范围见[数据说明](docs/CONFIGURATION.md#记忆与数据记录) |
-| 准备多少资源 | 首次使用向量功能可能下载嵌入模型。尚无统一最低配置或峰值内存实测；Compose 的 4g / 2 CPU 是机器人容器上限，见[部署说明](docs/DEPLOYMENT.md#docker-compose) |
+| 准备多少资源 | 首次使用向量功能可能下载嵌入模型。尚无统一最低配置或峰值内存实测；作者当前服务器的总资源上限为 4GB 内存 / 2 CPU，供部署环境参考，见[部署说明](docs/DEPLOYMENT.md#docker-compose) |
 | 如何估算费用 | 对话、提醒解析、图片处理与每日整理都可能调用模型；整理量还受记录消息数影响。应用预算不等于供应商账单，见[预算配置](docs/CONFIGURATION.md#回复预算与自主行动) |
 
 仓库尚无逐模型的端到端兼容性报告及按消息量统计的费用基准，选用兼容接口后仍需验证实际能力。
@@ -219,31 +230,11 @@ flowchart LR
 | [配置](docs/CONFIGURATION.md) | 模型、插件、记忆记录、权限、预算和Dashboard |
 | [命令与使用](docs/COMMANDS.md) | 小功能、提醒、记忆查询及所需插件 |
 | [架构](docs/ARCHITECTURE.md) | 模块职责、数据流、存储和发送状态 |
-| [第三方许可](docs/THIRD_PARTY_NOTICES.md) | 依赖、模型、协议端与素材的授权边界 |
 | [更新记录](docs/CHANGELOG.md) | 已记录的功能变化 |
 
 ## 开发与贡献
 
-开发依赖和检查方式：
-
-```bash
-python -m pip install -e ".[dev]"
-python -m pytest -q
-git diff --check
-```
-
-测试应使用合成消息与隔离的存储，不连接生产QQ会话；
-测试结果不等于真实QQ环境的完整验证。
-
-欢迎提交问题和改进。问题报告请包含Python版本、部署方式、复现步骤与已脱敏错误信息；
-修改配置、存储格式、权限或发送行为时，请说明兼容性与验证范围。
-
-近期优先完善首次部署与诊断、记忆范围与管理，以及模型兼容性和真实运行验证。
-可以从这些具体贡献开始：
-
-- **验证一条部署路径**：记录系统、Python 版本与 NapCat 拓扑，检查安装、连接及首次体验步骤。
-- **验证一个模型配置**：分别测试文字、图片、提醒解析与每日整理，记录接口能力、项目版本和失败条件。
-- **补充记忆范围测试**：使用合成用户与隔离存储，覆盖跨群、私聊、同名用户，以及纠正和删除后的读取。
+欢迎通过 [Issues](https://github.com/lanxinmob/mako-bot/issues) 反馈问题或提出建议，也欢迎提交 Pull Request 改进代码与文档。
 
 ## LICENSE
 
@@ -252,6 +243,5 @@ git diff --check
 第三方组件、模型与角色素材遵守各自授权。默认嵌入模型
 [`moka-ai/m3e-base`](https://huggingface.co/moka-ai/m3e-base#-license) 限非商用、研究用途，
 [NapCat](https://github.com/NapNeko/NapCatQQ/blob/main/LICENSE) 也含非商用等限制。
-完整部署的许可范围见[第三方说明](docs/THIRD_PARTY_NOTICES.md)。
 
 感谢NoneBot2、OneBot适配器、APScheduler、NapCat及相关开源依赖。

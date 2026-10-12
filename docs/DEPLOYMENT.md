@@ -11,12 +11,12 @@
 | Redis Stack | 保存业务状态，并通过RediSearch提供向量索引 |
 | 模型/API服务 | 生成对话、整理记忆或查询资料，凭据放在私有配置中 |
 
-本机部署见[README快速开始](../README.md#快速开始)。Python要求与依赖以
+本机部署见[README快速开始](../README.md#快速开始)，Python要求与依赖以
 [pyproject.toml](../pyproject.toml)为准。
 
 默认嵌入模型通过sentence-transformers延迟加载，首次使用向量功能可能下载模型权重。
 内存需求取决于模型、记录量、并发和图片处理，仓库没有提供经实测的统一最低资源要求。
-协议端、模型和服务各自的使用条件见[第三方许可](THIRD_PARTY_NOTICES.md)。
+协议端、模型和服务各自的使用条件以其上游许可和服务条款为准。
 
 ## 准备配置
 
@@ -46,8 +46,9 @@ Compose将机器人容器内的 `HOST`、`PORT`、`REDIS_URL` 分别设为
 主机端口默认仅绑定 `127.0.0.1:8080`；主机端口可以通过 `BOT_PORT` 调整，
 容器内的OneBot和Web服务端口仍为8080。
 
-`BOT_MEMORY_LIMIT` 和 `BOT_CPU_LIMIT` 的当前默认上限分别为4g与2.0。
-这两个值是资源限制，不是已验证的最低需求，也不包含NapCat和Redis的占用。
+作者当前部署服务器的总资源上限为 **4GB 内存 / 2 CPU**，这组数值用于说明作者的部署环境。
+Compose 中 `BOT_MEMORY_LIMIT` 和 `BOT_CPU_LIMIT` 的默认值沿用这组数值，
+控制机器人容器的资源配额。部署时应根据实际主机容量及 NapCat、Redis 等其他进程的占用调整配额。
 
 检查容器内就绪状态：
 

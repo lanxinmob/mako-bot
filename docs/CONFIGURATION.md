@@ -63,7 +63,7 @@ OpenAI聊天入口也会尝试原生图片输入；图片最多3张。
 媒体工具的 `IMAGE_PROVIDER` 默认 `none`，与主聊天视觉能力是不同开关。
 
 更换嵌入模型后，需要重新生成匹配模型与维度的向量和索引。
-默认模型有非商用、研究用途限制，详见[第三方许可](THIRD_PARTY_NOTICES.md)。
+默认模型有非商用、研究用途限制，详见[上游模型说明](https://huggingface.co/moka-ai/m3e-base#-license)。
 
 ### 模型接入范围
 
