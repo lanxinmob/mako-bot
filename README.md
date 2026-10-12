@@ -238,10 +238,10 @@ flowchart LR
 
 ## LICENSE
 
-作者拥有版权的源码与原创文档采用 **[MIT License](LICENSE)**；分发时保留版权声明和许可全文。
+本项目源码采用 [MIT License](LICENSE)。
 
-第三方组件、模型与角色素材遵守各自授权。默认嵌入模型
-[`moka-ai/m3e-base`](https://huggingface.co/moka-ai/m3e-base#-license) 限非商用、研究用途，
-[NapCat](https://github.com/NapNeko/NapCatQQ/blob/main/LICENSE) 也含非商用等限制。
+## 鸣谢
 
-感谢NoneBot2、OneBot适配器、APScheduler、NapCat及相关开源依赖。
+- [nonebot_plugin-apscheduler](https://github.com/nonebot/plugin-apscheduler)
+- [nonebot_plugin_lagrange](https://github.com/Lonely-Sails/nonebot-plugin-lagrange)
+- [NapCatQQ](https://github.com/NapNeko/NapCatQQ)

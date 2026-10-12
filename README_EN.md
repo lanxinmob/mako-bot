@@ -249,11 +249,10 @@ Pull Requests improving the code or documentation are welcome.
 
 ## LICENSE
 
-Source code and original documentation owned by the author are released under the **[MIT License](LICENSE)**.
-Keep the copyright notice and full license when distributing them.
+The source code is licensed under the [MIT License](LICENSE).
 
-Third-party components, models and character assets retain their own licenses.
-The default embedding model, [`moka-ai/m3e-base`](https://huggingface.co/moka-ai/m3e-base#-license), is restricted to non-commercial research use.
-[NapCat](https://github.com/NapNeko/NapCatQQ/blob/main/LICENSE) also has non-commercial and other restrictions.
+## Acknowledgements
 
-Thanks to NoneBot2, the OneBot adapter, APScheduler, NapCat and the open-source dependencies used by this project.
+- [nonebot_plugin-apscheduler](https://github.com/nonebot/plugin-apscheduler)
+- [nonebot_plugin_lagrange](https://github.com/Lonely-Sails/nonebot-plugin-lagrange)
+- [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
