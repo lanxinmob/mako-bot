@@ -5,20 +5,8 @@
 <h1 align="center">Mako-Bot</h1>
 
 <p align="center">
-  ✨ <strong>Give character conversations on QQ memories that carry forward.</strong> ✨
+  ✨&nbsp;<strong>Give character conversations on QQ memories that carry forward.</strong>&nbsp;✨
 </p>
-
-<p align="center">
-  <a href="README.md">中文</a> · <a href="README_EN.md">English</a>
-</p>
-
-Mako-Bot is a self-hosted character companion for QQ private chats and small groups of people who know each other.
-Built around Hitachi Mako from *Senren＊Banka*, she draws on recent conversations, user profiles and saved memories
-to participate with a playful, opinionated voice. The application also supports group reply pacing, information retrieval and scheduled reminders.
-
-Operators can use the Web dashboard to inspect saved memories, user profiles and autonomous task records.
-Built with [NoneBot2](https://github.com/nonebot/nonebot2), OneBot V11 and
-[NapCatQQ](https://github.com/NapNeko/NapCatQQ).
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/source_license-MIT-green" alt="Source license: MIT"></a>
@@ -27,11 +15,23 @@ Built with [NoneBot2](https://github.com/nonebot/nonebot2), OneBot V11 and
 </p>
 
 <p align="center">
+  <a href="README.md">中文</a> · <a href="README_EN.md">English</a>
+  <br>
   <a href="#try-mako">Try Mako</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#configuration-resources-and-costs">Configuration and privacy</a> ·
   <a href="#documentation">Documentation</a>
 </p>
+
+## Overview
+
+Mako-Bot is a self-hosted character companion for QQ private chats and small groups of people who know each other.
+Built around Hitachi Mako from *Senren＊Banka*, she draws on recent conversations, user profiles and saved memories
+to participate with a playful, opinionated voice. The application also supports group reply pacing, information retrieval and scheduled reminders.
+
+Operators can use the Web dashboard to inspect saved memories, user profiles and autonomous task records.
+Built with [NoneBot2](https://github.com/nonebot/nonebot2), OneBot V11 and
+[NapCatQQ](https://github.com/NapNeko/NapCatQQ).
 
 ## Try Mako
 

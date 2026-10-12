@@ -5,12 +5,25 @@
 <h1 align="center">Mako-Bot</h1>
 
 <p align="center">
-  ✨ <strong>让 QQ 中的角色对话，拥有延续下去的记忆。</strong> ✨
+  ✨&nbsp;<strong>让 QQ 中的角色对话，拥有延续下去的记忆。</strong>&nbsp;✨
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/source_license-MIT-green" alt="Source license: MIT"></a>
+  <a href="https://github.com/lanxinmob/mako-bot/actions/workflows/ci.yml"><img src="https://github.com/lanxinmob/mako-bot/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-%3E%3D3.10-blue" alt="Python &gt;=3.10"></a>
 </p>
 
 <p align="center">
   <a href="README.md">中文</a> · <a href="README_EN.md">English</a>
+  <br>
+  <a href="#体验入口">体验入口</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#配置资源与费用">配置与隐私</a> ·
+  <a href="#文档">开发文档</a>
 </p>
+
+## 简介
 
 Mako-Bot 是一个可自行部署的 QQ 角色伙伴，面向私聊和熟悉的小群。
 围绕《千恋万花》中常陆茉子的角色设定，她会参考近期聊天、人物档案与保存的记忆，
@@ -19,20 +32,6 @@ Mako-Bot 是一个可自行部署的 QQ 角色伙伴，面向私聊和熟悉的�
 部署者可以通过 Web 面板查看保存的记忆、人物档案与自主任务记录。
 基于 [NoneBot2](https://github.com/nonebot/nonebot2)、OneBot V11 与
 [NapCatQQ](https://github.com/NapNeko/NapCatQQ)。
-
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/source_license-MIT-green" alt="Source license: MIT"></a>
-  <a href="https://github.com/lanxinmob/mako-bot/actions/workflows/ci.yml"><img src="https://github.com/lanxinmob/mako-bot/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-%3E%3D3.10-blue" alt="Python &gt;=3.10"></a>
-</p>
-
-
-<p align="center">
-  <a href="#体验入口">体验入口</a> ·
-  <a href="#快速开始">快速开始</a> ·
-  <a href="#配置资源与费用">配置与隐私</a> ·
-  <a href="#文档">开发文档</a>
-</p>
 
 ## 体验入口
 
