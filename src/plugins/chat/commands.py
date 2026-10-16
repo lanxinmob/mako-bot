@@ -9,12 +9,12 @@ from .reminders import format_reminders
 from .ledger_commands import handle, natural_invoked
 from src.services.memory.ledger.commands import Command, parse
 
-list_reminders_handler = on_command('我的提醒', aliases={'查看提醒'})
-relationship_list_handler = on_command('关系记忆', aliases={'我的记忆', '茉子记得什么'}, priority=8, block=True)
-relationship_correct_handler = on_command('纠正记忆', priority=8, block=True)
-relationship_delete_handler = on_command('删除记忆', aliases={'忘掉记忆'}, priority=8, block=True)
-relationship_explain_handler = on_command('解释记忆', priority=8, block=True)
-relationship_relearn_handler = on_command('重新记住', priority=8, block=True)
+list_reminders_handler = on_command('我的提醒', aliases={'查看提醒', 'reminders'})
+relationship_list_handler = on_command('关系记忆', aliases={'我的记忆', '茉子记得什么', 'memories'}, priority=8, block=True)
+relationship_correct_handler = on_command('纠正记忆', aliases={'correct-memory'}, priority=8, block=True)
+relationship_delete_handler = on_command('删除记忆', aliases={'忘掉记忆', 'forget-memory'}, priority=8, block=True)
+relationship_explain_handler = on_command('解释记忆', aliases={'explain-memory'}, priority=8, block=True)
+relationship_relearn_handler = on_command('重新记住', aliases={'relearn-memory'}, priority=8, block=True)
 relationship_natural_handler = on_message(rule=natural_invoked, priority=8, block=True)
 
 

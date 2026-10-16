@@ -86,3 +86,15 @@ def test_short_cards_separate_facts_from_original_fiction(query, source):
     assert source in reply.text
     assert len(re.sub(r"https://\S+", "", reply.text)) <= 400
     assert "寿命" not in reply.text and "享年" not in reply.text
+
+
+@pytest.mark.parametrize(('english', 'chinese'), [
+    ('Tang dynasty', '唐朝'), ('CHINA Tang', '中国唐朝'),
+    ('Egypt', '埃及'), ('London', '伦敦'), ('Japan Edo', '日本江户'),
+])
+def test_english_filters_select_same_story(english, chinese):
+    assert journey(english).text == journey(chinese).text
+
+
+def test_english_filter_rejects_unknown_extra_words():
+    assert '历史背景：' not in journey('Tang dynasty Mars').text

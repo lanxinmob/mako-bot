@@ -99,19 +99,21 @@ async def test_real_nonebot_self_explain_change_and_forget(runtime):
 
 
 @pytest.mark.asyncio
-async def test_group_redirect_before_any_personal_lookup(runtime, monkeypatch):
+@pytest.mark.parametrize('command', ['我的记忆', '/memories', 'memories'])
+async def test_group_redirect_before_any_personal_lookup(runtime, monkeypatch, command):
     monkeypatch.setattr(runtime.module, 'governance', SimpleNamespace(can_chat=Mock(side_effect=AssertionError('read forbidden'))))
     monkeypatch.setattr(runtime.module, 'LedgerService', Mock(side_effect=AssertionError('ledger forbidden')))
-    await runtime.bot.handle_event(event('我的记忆'))
+    await runtime.bot.handle_event(event(command))
     assert len(runtime.sends) == 1 and '本人私聊' in str(runtime.sends[0]['message'])
 
 
 @pytest.mark.asyncio
-async def test_unaccepted_private_is_silent_without_ledger_reads(runtime, monkeypatch):
+@pytest.mark.parametrize('command', ['我的记忆', '/memories', 'memories'])
+async def test_unaccepted_private_is_silent_without_ledger_reads(runtime, monkeypatch, command):
     runtime.allowed = False
     reader = Mock(side_effect=AssertionError('ledger forbidden'))
     monkeypatch.setattr(runtime.module, 'LedgerService', reader)
-    await runtime.bot.handle_event(personal('我的记忆'))
+    await runtime.bot.handle_event(personal(command))
     reader.assert_not_called()
     assert not runtime.sends and not runtime.fallback
 
@@ -154,3 +156,66 @@ async def test_access_revoked_while_explanation_queued(runtime):
     release.set()
     await asyncio.gather(blocking, task)
     assert not runtime.sends
+
+
+@pytest.mark.asyncio
+async def test_english_memory_commands_share_existing_mutation_path(runtime):
+    ledger = runtime.ledger
+    mid = (await ledger.mutate(101, 'auto', None, 'I like oolong tea', source(1)))['memory_id']
+    await runtime.bot.handle_event(personal('/memories', 80))
+    assert mid in str(runtime.sends[-1]['message'])
+    await runtime.bot.handle_event(personal('/explain-memory ' + mid, 81))
+    assert '依据：I like oolong tea' in str(runtime.sends[-1]['message'])
+    await runtime.bot.handle_event(personal('/correct-memory ' + mid + ' I no longer like oolong tea', 82))
+    assert any(m.content == '不喜欢：oolong tea' and m.status == 'active' for m in ledger.list(101))
+    await runtime.bot.handle_event(personal('/forget-memory ' + mid, 83))
+    assert all(m.status == 'forgotten' for m in ledger.list(101))
+    await runtime.bot.handle_event(personal('/relearn-memory ' + mid + ' I like oolong tea', 84))
+    assert any(m.content == '喜欢：oolong tea' and m.status == 'active' for m in ledger.list(101))
+    assert not runtime.fallback
+
+
+@pytest.mark.parametrize(('english', 'chinese'), [
+    ('memories', '关系记忆'), ('explain-memory abc', '解释记忆 abc'),
+    ('correct-memory abc 我不喜欢茶', '纠正记忆 abc 我不喜欢茶'),
+    ('forget-memory abc', '忘掉记忆 abc'),
+    ('relearn-memory abc 我喜欢茶', '重新记住 abc 我喜欢茶'),
+])
+def test_english_memory_parser_matches_chinese(english, chinese):
+    from src.services.memory.ledger.commands import parse
+    assert parse(english) == parse('/' + english) == parse(chinese)
+    assert parse('please ' + english) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('command', ['/reminders', '/我的提醒'])
+async def test_reminder_alias_uses_current_session_and_user(plugin, monkeypatch, command):
+    nonebot.load_plugin('src.plugins.chat') if not nonebot.get_plugin('chat') else None
+    commands = importlib.import_module('src.plugins.chat.commands')
+    calls, sends = [], []
+    def format_list(session_id, *, user_id):
+        calls.append((session_id, user_id))
+        return 'synthetic reminders'
+    async def api(bot, name, **kwargs):
+        sends.append(kwargs)
+        return {'message_id': 123}
+    monkeypatch.setattr(commands, 'format_reminders', format_list)
+    monkeypatch.setattr(Bot, 'call_api', api)
+    monkeypatch.setattr(importlib.import_module('nonebot.message'), 'matchers',
+                        {commands.list_reminders_handler.priority: [commands.list_reminders_handler]})
+    bot = Bot(Adapter(nonebot.get_driver()), '42')
+    await bot.handle_event(personal(command))
+    assert calls == [('private_101', 101)]
+    assert len(sends) == 1 and 'synthetic reminders' in str(sends[0]['message'])
+
+
+@pytest.mark.parametrize(('text', 'operation', 'topic'), [
+    ('Why do you think I like oolong tea?', 'why', 'oolong tea'),
+    ("I used to like oolong tea, but I don't anymore", 'change', "I used to like oolong tea, but I don't anymore"),
+    ('forget this', 'quoted_forget', ''),
+])
+def test_english_natural_memory_controls(text, operation, topic):
+    from src.services.memory.ledger.commands import parse
+    command = parse(text)
+    assert command.operation == operation
+    assert command.text == topic

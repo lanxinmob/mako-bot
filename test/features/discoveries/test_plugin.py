@@ -70,7 +70,7 @@ async def test_one_structured_reply_and_duplicates_skip_lookup(plugin, monkeypat
     monkeypatch.setattr(plugin, "repeat_gate", RepeatGate())
     monkeypatch.setattr(plugin, "send_to_group", send)
     matcher, bot = SimpleNamespace(finish=finish), SimpleNamespace(self_id="42")
-    await plugin.handle_discovery(matcher, Event("小鸟"), bot)
+    await plugin.handle_discovery(matcher, Event("bird"), bot)
     await plugin.handle_discovery(matcher, Event("小鸟"), bot)
     await plugin.handle_discovery(matcher, Event("传送"), bot)
     assert len(lookups) == len(sends) == 2
@@ -94,5 +94,5 @@ async def test_denied_tools_do_not_lookup_or_send(plugin, monkeypatch):
     monkeypatch.setattr(plugin, "service", SimpleNamespace(run=forbidden))
     monkeypatch.setattr(plugin, "send_to_group", forbidden)
     monkeypatch.setattr(plugin, "send_to_private", forbidden)
-    await plugin.handle_discovery(SimpleNamespace(finish=finish), Event("期刊 Nature"),
+    await plugin.handle_discovery(SimpleNamespace(finish=finish), Event("journal Nature"),
                                   SimpleNamespace(self_id="42"))

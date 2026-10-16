@@ -17,6 +17,7 @@ HELP = (
     "「期刊 Nature」「期刊 1932-6203」查刊；「投稿 machine learning」按论文主题找刊。\n\n"
     "📒 翻翻茉子的笔记（仅 owner）\n「人物档案」看人数和最近几位；\n"
     "「人物档案 ID」或「人物档案 名称」看完整档案。我会私聊给你，可别在群里摊开啦。\n\n"
+    "English commands: bird [species], journey [era/place], journal [name/ISSN], suggest [topic].\n\n"
     "直接发命令，叫我茉子或 @我也行。别光看说明，试试嘛~"
 )
 
@@ -37,12 +38,13 @@ def parse_command(text: str, nicknames=("茉子", "mako")) -> Command | None:
         return Command("help")
     if text.startswith(("/", ".")):
         text = text[1:]
-    match = re.fullmatch(r"(小鸟|今日小鸟|传送|期刊|发表|投稿)(?:[ \t]+([^\r\n]{1,100}))?", text)
+    match = re.fullmatch(r"(小鸟|今日小鸟|传送|期刊|发表|投稿|bird|journey|journal|suggest)(?:[ \t]+([^\r\n]{1,100}))?", text, re.IGNORECASE)
     if match is None:
         return None
     name, argument = match.groups()
     kind = {"小鸟": "bird", "今日小鸟": "bird", "传送": "journey",
-            "期刊": "journal", "发表": "suggest", "投稿": "suggest"}[name]
+            "期刊": "journal", "发表": "suggest", "投稿": "suggest",
+            "bird": "bird", "journey": "journey", "journal": "journal", "suggest": "suggest"}[name.casefold()]
     return Command(kind, (argument or "").strip())
 
 

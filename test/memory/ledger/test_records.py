@@ -152,3 +152,56 @@ def test_cache_eviction_does_not_reauthorize_old_relearn(ledger):
         run(ledger, 'auto', text=f'我喜欢合成主题{index}', message=100 + index)
     assert run(ledger, 'relearn', mid, '我喜欢乌龙茶', message=3)['status'] == 'already_processed'
     assert not any(m.status == 'active' and '乌龙茶' in m.content for m in ledger.list(101))
+
+
+@pytest.mark.parametrize(('text', 'expected'), [
+    ('I like oolong tea', '喜欢：oolong tea'),
+    ('I LOVE oolong tea.', '喜欢：oolong tea'),
+    ("I don't like oolong tea anymore", '不喜欢：oolong tea'),
+    ('I do not like oolong tea', '不喜欢：oolong tea'),
+    ('I no longer like oolong tea', '不喜欢：oolong tea'),
+    ('I dislike oolong tea', '不喜欢：oolong tea'),
+    ('I hate oolong tea', '讨厌：oolong tea'),
+    ("I used to like oolong tea, but I don't anymore", '不喜欢：oolong tea'),
+])
+def test_english_preference_rules(text, expected):
+    from src.services.memory.ledger.facts import fact, subject
+    parsed = fact(text)
+    assert parsed['content'] == expected
+    assert parsed['subject_key'] == subject('preference', 'oolong tea')
+
+
+@pytest.mark.parametrize('text', [
+    'She said I like tea', '"I like tea"', 'I like tea?',
+    'I like tea but I dislike coffee', 'I like tea if it is free',
+    'I like tea. Just kidding', 'I like my password abc',
+    'I like tea\nI hate coffee', 'I like', 'I would like tea',
+])
+def test_english_preference_does_not_guess(text):
+    from src.services.memory.ledger.facts import fact
+    assert fact(text) is None
+
+
+@pytest.mark.asyncio
+async def test_english_chat_intake_and_forgetting_boundary(ledger):
+    from src.services.memory.relationship import RelationshipService
+    service = RelationshipService(storage=ledger.storage)
+    def incoming(text, message, **extra):
+        return SimpleNamespace(normalized=SimpleNamespace(plain_text=text),
+            address=SimpleNamespace(user_id=101), source_ref=dict(source(message), **extra))
+    first = await service.absorb_incoming(incoming('I like oolong tea', 1))
+    mid = first['memory_id']
+    assert 'I like oolong tea' in ledger.explain(101, mid)
+    assert ledger.list(102) == []
+    assert (await ledger.mutate(102, 'forget', mid, '', source(2, 102)))['status'] == 'not_found'
+    assert (await ledger.mutate(101, 'correct', mid, 'I like coffee', source(3)))['status'] == 'wrong_topic'
+    changed = await ledger.mutate(101, 'correct', mid, 'I no longer like oolong tea', source(4))
+    assert changed['status'] == 'correct'
+    assert any(m.content == '不喜欢：oolong tea' and m.status == 'active' for m in ledger.list(101))
+    assert (await ledger.mutate(101, 'forget', changed['memory_id'], '', source(5)))['status'] == 'forgotten'
+    assert (await service.absorb_incoming(incoming('I like oolong tea', 6)))['status'] == 'blocked'
+    assert (await service.absorb_incoming(incoming('I like oolong tea', 7, quoted=True)))['status'] == 'ignored'
+    assert all(not m.content and not m.source_excerpt for m in ledger.list(101))
+    restored = await ledger.mutate(101, 'relearn', mid, 'I like oolong tea', source(8))
+    assert restored['status'] == 'relearn'
+    assert len([m for m in ledger.list(101) if m.status == 'active']) == 1

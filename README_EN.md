@@ -15,99 +15,66 @@
 </p>
 
 <p align="center">
-  <a href="README.md">中文</a> · <a href="README_EN.md">English</a>
-  <br>
-  <a href="#try-mako">Try Mako</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#configuration-resources-and-costs">Configuration and privacy</a> ·
-  <a href="#documentation">Documentation</a>
+  <a href="README_EN.md"><img src="https://img.shields.io/badge/English-334155?style=for-the-badge" alt="English"></a>
+  <a href="README.md"><img src="https://img.shields.io/badge/%E4%B8%AD%E6%96%87-64748b?style=for-the-badge" alt="中文"></a>
+</p>
+
+<p align="center">
+  <a href="#try-mako"><img src="https://img.shields.io/badge/Try%20Mako-475569?style=for-the-badge" alt="Try Mako"></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Quick%20start-ea580c?style=for-the-badge" alt="Quick start"></a>
+  <a href="#configuration-resources-and-costs"><img src="https://img.shields.io/badge/Configuration%20and%20privacy-475569?style=for-the-badge" alt="Configuration and privacy"></a>
+  <a href="#documentation"><img src="https://img.shields.io/badge/Documentation-475569?style=for-the-badge" alt="Documentation"></a>
 </p>
 
 ## Overview
 
-Mako-Bot is a self-hosted character companion for QQ private chats and small groups of people who know each other.
-Built around Hitachi Mako from *Senren＊Banka*, she draws on recent conversations, user profiles and saved memories
-to participate with a playful, opinionated voice. The application also supports group reply pacing, information retrieval and scheduled reminders.
+Mako-Bot is a self-hosted character companion for QQ private chats and small groups of people who know each other. She takes on the role of Hitachi Mako from *Senren＊Banka*, drawing on recent conversations, user profiles and saved memories to chat in a playful, opinionated voice. She can also look up information, set reminders and decide when to join a group conversation.
 
-Operators can use the Web dashboard to inspect saved memories, user profiles and autonomous task records.
-Built with [NoneBot2](https://github.com/nonebot/nonebot2), OneBot V11 and
-[NapCatQQ](https://github.com/NapNeko/NapCatQQ).
+The companion comes with a Web dashboard where you can review the memories and profiles she builds over time, along with autonomous task records. Mako-Bot connects to QQ through [NoneBot2](https://github.com/nonebot/nonebot2), OneBot V11 and [NapCatQQ](https://github.com/NapNeko/NapCatQQ).
 
 ## Try Mako
 
-Start with these three experiences. The messages below are test inputs; see the [first-run guide](docs/FIRST_RUN.md) for steps and checks.
-QQ commands retain their Chinese names in this English README.
+Try these three things to get to know Mako. The table gives example test messages. Follow the [first-run guide](docs/en/FIRST_RUN.md) for steps and checks.
 
 | Experience | Where to start | What to check |
 | --- | --- | --- |
-| Conversation continuity | Say “我喜欢乌龙茶” (“I like oolong tea”) in private chat, then send `/关系记忆` | Check the saved preference and try correcting it; return to the topic after the original message leaves recent history |
+| Conversation continuity | Say “I like oolong tea” in private chat, then send `/memories` | View or correct the saved preference, then return to the topic after the original message leaves recent history |
 | Group reply pacing | Observe ordinary conversation in a test group, then @ Mako | Watch replies and silence across different topics and conversations with several participants |
-| A reminder that runs | Say “五分钟后提醒我喝水” (“Remind me to drink water in five minutes”) in private chat, or @ Mako in a test group | Use `/我的提醒` to check the time and content, then confirm that the reminder actually arrives |
+| A reminder that runs | Say “Remind me to drink water in five minutes” in private chat, or @ Mako in a test group | Use `/reminders` to check the time and content, then confirm that the reminder actually arrives |
+
+English command aliases are supported. Replies and historical stories are currently mainly in Chinese. Explicit preferences such as “I like oolong tea” and “I no longer like oolong tea” can be saved and managed with the memory commands. Natural-language reminders use your configured model, so check the parsed time and content with `/reminders`.
 
 ## Why use Mako-Bot
 
-- **Let interactions accumulate**: user preferences, relationship events and profiles are saved alongside recent history for later replies to reference.
-- **Leave room for group conversation**: direct requests and ordinary conversation are assessed separately, with session pacing used to decide whether to reply.
-- **Inspect saved information and execution**: users can explain, correct and forget relationship memories in private chat. Operators can inspect sources and runtime status in the dashboard; reminders have separate query commands.
-
-In private chat, use `解释记忆 ID`, `纠正记忆 ID 现在不喜欢乌龙茶了` or `忘掉记忆 ID`.
-A correction creates a new ID. Forgetting clears the ledger and mirrored records for the same topic and stops related follow-ups.
-After the first correction or forgetting action, the old full profile and vectors without provenance are suspended from related replies;
-chat history and backups remain. Only `重新记住 ID 我喜欢乌龙茶` explicitly restores a forgotten topic.
-Repeating the preference in ordinary conversation does not restore it automatically.
-
-With the `companion` plugin enabled, users can create an exam plan in their own private chat with 1–3 tasks and an exact time in Beijing time.
-A plan sends at most one reminder before the exam and one invitation to reflect afterward, with the user's explicit consent for the latter.
-It remains quiet if the user does not reply. Use `我的考试计划` to inspect its status, `取消计划 ID` to stop future actions,
-or `忘掉计划 ID` to clear associated text. See [exam companion commands](docs/COMMANDS.md#考试陪伴) for formats and authorization boundaries.
-
-Mako-Bot is intended for individuals willing to maintain QQ connectivity, storage and model configuration,
-and developers studying character conversations and memory workflows.
-The current character is defined in [the prompt source](src/core/prompts.py). Changing characters requires editing the prompt;
-there is no ready-made multi-character switching setting.
+- **Let interactions accumulate**: saved preferences, relationship events and profiles give later conversations more context alongside recent history.
+- **Leave room for group conversation**: direct requests and ordinary chat follow different reply rules, with the current conversation pace helping determine when to join in.
+- **View and correct memories**: in private chat, you can [check sources, correct or forget your own relationship memories](docs/en/COMMANDS.md#profiles-and-personal-relationship-memories). Operators can also check runtime status in the dashboard and use reminder commands to inspect reminders.
 
 ## Capabilities
 
 | Capability | Practical use |
 | --- | --- |
-| Character conversations | Chat as Mako with recent conversation context; group rules and pacing determine whether to reply |
+| Character conversations | Chat as Mako with recent conversation context, using group rules and pacing to decide whether to reply |
 | Memories and profiles | Save preferences and relationship events, then consolidate user information and significant events from past records each day |
-| Tools and retrieval | Query weather, web pages and news, save notes and set private or group reminders; configure tool permissions and invocation limits by session type |
-| Image understanding | Discuss images after configuring a supported vision service; process at most 3 images per message |
+| Tools and retrieval | Look up weather, web pages and news, save notes and set private or group reminders. Tool permissions and call limits can be configured by session type |
+| Image understanding | Discuss images after configuring a supported vision service, with up to 3 images per message |
 | Delivery status | Separate generation, send confirmation and history recovery to help operators investigate undelivered or unresolved results |
-| Web dashboard | Inspect memories, profiles, autonomous tasks and runtime summaries through token-protected data endpoints |
+| Web dashboard | Enter a token to view memories, profiles, autonomous tasks and runtime summaries |
 
-There are also a few everyday tools: `小鸟 麻雀` looks up a bird species and images with licensing information,
-`传送 唐朝` provides historical context and an original fictional slice-of-life story, and `期刊 Nature` looks up a real journal.
-These three explicit command paths do not call paid models; other chat and consolidation workflows may incur model costs.
-See [commands and usage](docs/COMMANDS.md) for the full list and requirements.
+There are also a few everyday tools: `bird Passer montanus` looks up a bird species and images with licensing information, `journey Tang dynasty` provides historical context and an original fictional slice-of-life story, and `journal Nature` looks up a real journal. These three commands do not call paid models. Other chat and memory consolidation workflows may incur model costs. See [commands and usage](docs/en/COMMANDS.md) for the full list and requirements.
 
 ## Quick start
 
-> **Data recording:** by default, messages in allowed groups are recorded for later memory consolidation, including messages that do not @ the bot.
-> Set `RECORD_UNDIRECTED_GROUP_MESSAGES=false` to disable passive recording.
-> Before enabling it, read about [recording, model requests and memory scope](docs/CONFIGURATION.md#记忆与数据记录), and inform participants.
-
-This guide uses **local Python + Redis Stack in Docker + a separate NapCat instance**, for operators able to maintain all three components.
-You need Python, Docker, an available model service and network access to download the embedding model and reach information sources.
-See the [deployment guide](docs/DEPLOYMENT.md) for container deployments and connections across hosts.
+> **Data recording:** by default, messages in allowed groups are recorded for later memory consolidation, including messages that do not @ the bot. Set `RECORD_UNDIRECTED_GROUP_MESSAGES=false` to disable passive recording. Before enabling it, read about [recording, model requests and memory scope](docs/en/CONFIGURATION.md#memory-and-data-recording), and inform participants.
 
 ### 1. Get and install the project
 
 ```bash
 git clone https://github.com/lanxinmob/mako-bot.git
 cd mako-bot
-python -m venv .venv
-```
 
-Activate the virtual environment:
-
-| Platform | Command |
-| --- | --- |
-| Windows PowerShell | `.venv\Scripts\Activate.ps1` |
-| Linux / macOS | `source .venv/bin/activate` |
-
-```bash
+conda create -n mako-bot python=3.13 pip
+conda activate mako-bot
 python -m pip install .
 ```
 
@@ -121,16 +88,13 @@ docker run -d --name mako-redis -p 127.0.0.1:6379:6379 -v mako-redis-data:/data 
 
 ### 3. Configure the model and connections
 
-For first-time setup, copy the public template and edit the new `.env`.
-The following command creates the file exclusively: if `.env` already exists, it raises `FileExistsError` and preserves the existing file.
-In that case, edit your current configuration directly.
+For first-time setup, run the command below to create `.env` from the public template, then edit it. If the file already exists, the command raises `FileExistsError` and preserves it. In that case, edit your existing configuration.
 
 ```bash
 python -c "from pathlib import Path; template = Path('.env.example').read_bytes(); target = Path('.env').open('xb'); target.write(template); target.close()"
 ```
 
-`GROUP_ID` and `AUTONOMY_OWNER_ID` in the template are optional integers. Comment out or remove unused entries; do not leave them empty.
-Check the following fields for this setup, using the address and model name of your actual service:
+`GROUP_ID` and `AUTONOMY_OWNER_ID` in the template are optional integers. Comment out or remove unused entries rather than leaving them empty. Check the following fields for this setup, using the address and model name of your actual service:
 
 ```dotenv
 HOST=127.0.0.1
@@ -146,11 +110,7 @@ PLUGIN_ENABLE_LIST=chat,health,discoveries,dashboard,scheduler,precipitate_knowl
 RECORD_UNDIRECTED_GROUP_MESSAGES=false
 ```
 
-Replace the example values. This example starts with passive group recording disabled; messages admitted by the chat workflow may still be saved.
-Decide whether to enable passive recording after reviewing its scope.
-The explicit plugin list enables chat, health checks, everyday tools, the dashboard, news commands and daily memory consolidation.
-It also avoids a deleted module still referenced by the current default list; see [plugin configuration](docs/CONFIGURATION.md#插件与工具).
-See [model integration scope](docs/CONFIGURATION.md#模型接入范围) for the capabilities of each model entry point.
+Replace the example values. Passive group recording starts disabled in this example, but messages accepted by the chat workflow may still be saved. Read about what is recorded before deciding whether to enable passive recording. The plugin list above enables chat, health checks, everyday tools, the dashboard, news commands and daily memory consolidation. Using this list also avoids a deleted module still referenced by the current defaults. See [plugin configuration](docs/en/CONFIGURATION.md#plugins-and-tools) for details. See [model integration scope](docs/en/CONFIGURATION.md#model-integration-scope) for the capabilities of each model entry point.
 
 ### 4. Start the bot and connect QQ
 
@@ -165,8 +125,7 @@ Start NapCat and log in to QQ. Enable a **reverse WebSocket** in its OneBot V11 
 - URL: `ws://127.0.0.1:8080/onebot/v11/ws`
 - Token: the same value as `ONEBOT_ACCESS_TOKEN`
 
-This address applies when NapCat and the bot run directly on the same host.
-For NapCat in a container or on another host, use a reachable address according to the [connection topology](docs/DEPLOYMENT.md#连接napcat).
+This address applies when NapCat and the bot run directly on the same host. For NapCat in a container or on another host, use a reachable address according to the [connection topology](docs/en/DEPLOYMENT.md#connect-napcat).
 
 ### 5. Verify the first conversation
 
@@ -182,32 +141,26 @@ A ready response is:
 {"status":"ready","checks":{"redis":"ok","llm":"configured"}}
 ```
 
-This means Redis is reachable and model credentials are configured. It does not validate a model request or the QQ connection.
-Send `/help` in private chat to check command delivery, then send an ordinary greeting to check model conversation.
-In a group, @ the bot to address it explicitly. Follow the [troubleshooting sequence](docs/DEPLOYMENT.md#启动与连接排查) if a step fails.
+This means Redis is reachable and model credentials are configured. It does not validate a model request or the QQ connection. Send `/help` in private chat to check command delivery, then send an ordinary greeting to check model conversation. In a group, @ the bot to address it explicitly. Follow the [troubleshooting sequence](docs/en/DEPLOYMENT.md#startup-and-connection-troubleshooting) if a step fails.
 
-Once it replies, follow the [first-run guide](docs/FIRST_RUN.md) to check a saved preference, a group reply sequence and a delivered reminder.
+Once it replies, follow the [first-run guide](docs/en/FIRST_RUN.md) to check a saved preference, a group reply sequence and a delivered reminder.
 
-Optionally, set `DASHBOARD_TOKEN` to a value of at least 32 characters, open
-`http://127.0.0.1:8080/mako/dashboard` and enter the token to inspect the data.
+Optionally, set `DASHBOARD_TOKEN` to a value of at least 32 characters, open `http://127.0.0.1:8080/mako/dashboard` and enter the token to inspect the data.
 
 ## Configuration, resources and costs
 
 | Decision | Current behavior and documentation |
 | --- | --- |
-| Which model to use | Main chat uses `DEEPSEEK_*` when its key is configured, otherwise `OPENAI_*`; daily consolidation and reminder parsing use `DEEPSEEK_*`. Images have additional requirements; see [integration scope](docs/CONFIGURATION.md#模型接入范围) |
-| Which messages to record | Passive group recording is enabled by default and disabled in this example. See [data behavior](docs/CONFIGURATION.md#记忆与数据记录) for sharing and deletion across memory types |
-| How much capacity to provide | The first vector operation may download the embedding model. There are no standardized minimum requirements or peak-memory measurements. The author's current server has a total capacity of 4GB RAM / 2 CPUs, provided as deployment context; see [deployment](docs/DEPLOYMENT.md#docker-compose) |
-| How to estimate costs | Conversations, reminder parsing, image processing and daily consolidation can call models; consolidation also depends on the number of recorded messages. Application budgets are not provider bills; see [budget configuration](docs/CONFIGURATION.md#回复预算与自主行动) |
+| Which model to use | Main chat uses `DEEPSEEK_*` when its key is configured, otherwise `OPENAI_*`. Daily consolidation and reminder parsing use `DEEPSEEK_*`. Images have additional requirements, described in [integration scope](docs/en/CONFIGURATION.md#model-integration-scope) |
+| Which messages to record | Passive group recording is enabled by default and disabled in this example. See [data behavior](docs/en/CONFIGURATION.md#memory-and-data-recording) for sharing and deletion across memory types |
+| How much capacity to provide | The first vector operation may download the embedding model. There are no standardized minimum requirements or peak-memory measurements. See [deployment](docs/en/DEPLOYMENT.md#docker-compose) for environment details |
+| How to estimate costs | Conversations, reminder parsing, image processing and daily consolidation can call models. Consolidation also depends on the number of recorded messages. Application budgets are separate from provider bills. See [budget configuration](docs/en/CONFIGURATION.md#replies-budgets-and-autonomy) |
 
-The repository has no per-model end-to-end compatibility report or cost benchmark by message volume.
-After selecting a compatible API, verify the capabilities you need.
+There is no complete per-model compatibility report or cost benchmark by message volume yet. After connecting a service, try the features you need on your own deployment.
 
 ## Design overview
 
-Mako-Bot is an asynchronous Python monolith. A QQ message passes admission checks, then context, memories and tools are selected.
-Generated replies go to the delivery dispatcher. The dashboard reads storage through a query service;
-NapCat, Redis Stack and model services run outside the application process.
+Mako-Bot is an asynchronous Python monolith. When a QQ message arrives, the application decides whether to handle it, then selects context, memories and tools. Generated replies go to the delivery dispatcher. The dashboard reads storage through a query service. NapCat, Redis Stack and model services run as separate components.
 
 ```mermaid
 flowchart LR
@@ -224,32 +177,31 @@ flowchart LR
 ```
 
 - **Layered memory**: recent history provides continuity, relationship memories and profiles store user information, and vector retrieval adds relevant events. The configuration guide describes each layer's scope.
-- **Multiple reply checks**: admission, tool permissions and checks before sending are separate, reducing invalid candidates reaching a group. Autonomous actions and proactive follow-ups are disabled by default.
-- **Generation and delivery are recorded separately**: a generated response is not necessarily sent. Main messages, attachments and history updates have separate states; unresolved results remain available for review.
+- **Replies pass several checks**: rules are checked when accepting messages, running tools and sending replies to reduce outdated or unauthorized replies. Autonomous actions and proactive follow-ups are disabled by default.
+- **Generation and delivery are recorded separately**: generating a reply does not mean it was sent. Main messages, attachments and history updates have separate states. Unconfirmed results stay on record so they can be checked later.
 
-See [architecture](docs/ARCHITECTURE.md) for module responsibilities, detailed flows and recovery boundaries.
+See [architecture](docs/en/ARCHITECTURE.md) for module responsibilities, detailed flows and recovery boundaries.
 
 ## Documentation
 
-The detailed guides below are currently in Chinese.
+The guides below are available in English and Chinese. Use the language link at the top of each guide to switch.
 
 | Guide | Contents |
 | --- | --- |
-| [First-run experience](docs/FIRST_RUN.md) | Test inputs and checks for relationship memories, group pacing and reminders |
-| [Deployment and troubleshooting](docs/DEPLOYMENT.md) | Local and Docker Compose setups, NapCat connections, probes and persistence |
-| [Configuration](docs/CONFIGURATION.md) | Models, plugins, recording, permissions, budgets and the dashboard |
-| [Commands and usage](docs/COMMANDS.md) | Everyday tools, reminders, memory queries and required plugins |
-| [Architecture](docs/ARCHITECTURE.md) | Responsibilities, data flow, storage and delivery state |
-| [Changelog](docs/CHANGELOG.md) | Recorded feature changes |
+| [First-run experience](docs/en/FIRST_RUN.md) | Test inputs and checks for relationship memories, group pacing and reminders |
+| [Deployment and troubleshooting](docs/en/DEPLOYMENT.md) | Local and Docker Compose setups, NapCat connections, probes and persistence |
+| [Configuration](docs/en/CONFIGURATION.md) | Models, plugins, recording, permissions, budgets and the dashboard |
+| [Commands and usage](docs/en/COMMANDS.md) | Everyday tools, reminders, memory queries and required plugins |
+| [Architecture](docs/en/ARCHITECTURE.md) | Responsibilities, data flow, storage and delivery state |
+| [Changelog](docs/en/CHANGELOG.md) | Recorded feature changes |
 
 ## Development and contributions
 
-Use [Issues](https://github.com/lanxinmob/mako-bot/issues) to report problems or suggest improvements.
-Pull Requests improving the code or documentation are welcome.
+Use [Issues](https://github.com/lanxinmob/mako-bot/issues) to report problems or suggest improvements. Pull Requests improving the code or documentation are welcome.
 
 ## LICENSE
 
-The source code is licensed under the [MIT License](LICENSE).
+[MIT](LICENSE)
 
 ## Acknowledgements
 

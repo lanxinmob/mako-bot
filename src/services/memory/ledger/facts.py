@@ -11,7 +11,36 @@ def subject(kind, topic):
     return hashlib.sha256((kind + ':' + normalized(topic)).encode()).hexdigest()
 
 
+def english_preference(text: str) -> dict | None:
+    """Accept explicit first-person statements, not questions or quoted claims."""
+    if any(token in text for token in ('\n', '\r', '?', '？', '"', '“', '”', '[CQ:')):
+        return None
+    text = text.strip().rstrip('.!').replace('’', "'")
+    if re.search(r"\b(?:password|token|secret|api[ _-]?key|joking|kidding|said|says)\b|https?://", text, re.I):
+        return None
+    patterns = (
+        (r"I\s+used\s+to\s+like\s+(.+?),?\s+but\s+I\s+(?:don't|do\s+not)\s+(?:anymore|any\s+more)", '不喜欢'),
+        (r"I\s+(?:don't|do\s+not|no\s+longer)\s+like\s+(.+?)(?:\s+(?:anymore|any\s+more))?", '不喜欢'),
+        (r"I\s+dislike\s+(.+)", '不喜欢'),
+        (r"I\s+hate\s+(.+)", '讨厌'),
+        (r"I\s+(?:like|love)\s+(.+)", '喜欢'),
+    )
+    for pattern, attitude in patterns:
+        match = re.fullmatch(pattern, text, re.I)
+        if match:
+            topic = match[1].strip(' ,')
+            # Compound or hypothetical statements need clarification, not guessing.
+            if not topic or re.search(r"[.;!]|\b(?:but|if|unless|maybe)\b|\band\s+I\b", topic, re.I):
+                return None
+            return dict(memory_type='preference', content=f'{attitude}：{topic}',
+                        subject_key=subject('preference', topic))
+    return None
+
+
 def preference(text):
+    english = english_preference(text)
+    if english:
+        return english
     text = text.strip().rstrip('。.!！?？')
     patterns = (
         (r'以前喜欢(.+)，?现在不喜欢了', '不喜欢'),

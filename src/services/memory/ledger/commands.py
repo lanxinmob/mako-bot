@@ -14,21 +14,26 @@ class Command:
 
 def parse(text):
     text = text.strip().lstrip('/.')
-    if text in {'关系记忆', '我的记忆', '茉子记得什么'}:
+    if text in {'关系记忆', '我的记忆', '茉子记得什么', 'memories'}:
         return Command('list')
-    match = re.fullmatch(r'(解释记忆|纠正记忆|删除记忆|忘掉记忆|重新记住)\s+(\S+)(?:\s+(.+))?', text)
+    match = re.fullmatch(r'(解释记忆|纠正记忆|删除记忆|忘掉记忆|重新记住|explain-memory|correct-memory|forget-memory|relearn-memory)\s+(\S+)(?:\s+(.+))?', text)
     if match:
         operation = {'解释记忆': 'explain', '纠正记忆': 'correct', '删除记忆': 'forget',
-                     '忘掉记忆': 'forget', '重新记住': 'relearn'}[match[1]]
+                     '忘掉记忆': 'forget', '重新记住': 'relearn',
+                     'explain-memory': 'explain', 'correct-memory': 'correct',
+                     'forget-memory': 'forget', 'relearn-memory': 'relearn'}[match[1]]
         return Command(operation, match[2], match[3] or '')
-    if text == '忘掉这件事':
+    if text == '忘掉这件事' or text.casefold().rstrip('.!') == 'forget this':
         return Command('quoted_forget')
     if text in {'你为什么这样记我', '你为什么这样记我？', '以前喜欢，现在不喜欢了'}:
         return Command('choose')
     match = re.fullmatch(r'你为什么觉得我(?:喜欢|不喜欢|讨厌)(.+?)[？?]?', text)
     if match:
         return Command('why', text=match[1])
-    if text.startswith('以前喜欢') and fact(text):
+    match = re.fullmatch(r"Why do you think I (?:like|dislike|hate|don't like|do not like) (.+?)[?]?", text, re.I)
+    if match:
+        return Command('why', text=match[1])
+    if (text.startswith('以前喜欢') or text.casefold().startswith('i used to like ')) and fact(text):
         return Command('change', text=text)
     return None
 

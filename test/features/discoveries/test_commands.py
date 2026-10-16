@@ -29,3 +29,16 @@ def test_help_requires_slash_and_does_not_claim_other_help_messages():
         assert parse_command(text) == Command("help")
     for text in ("帮助", "发现帮助", "/发现帮助", "help", ".help", "/help extra", "/help\n小鸟"):
         assert parse_command(text) is None
+
+
+def test_english_aliases_preserve_arguments_and_command_boundaries():
+    pairs = [('bird Passer montanus', '小鸟 Passer montanus'),
+             ('journey Tang dynasty', '传送 Tang dynasty'),
+             ('journal Nature', '期刊 Nature'),
+             ('suggest machine learning', '投稿 machine learning')]
+    for english, chinese in pairs:
+        assert parse_command(english) == parse_command(chinese)
+        name, argument = english.split(' ', 1)
+        assert parse_command('mako /' + name.upper() + ' ' + argument) == parse_command(chinese)
+    for text in ('birdsong', 'I saw a bird', 'journal\nNature', 'bird ' + 'x' * 101):
+        assert parse_command(text) is None

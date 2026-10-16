@@ -162,7 +162,15 @@ def journey(
     query: str = "", *, user_id: int = 0, now: datetime | None = None
 ) -> DiscoveryReply:
     """Draw a new story, optionally filtered by region or era."""
-    query = normalize("NFKC", query).strip()
+    query = normalize("NFKC", query).strip().casefold()
+    translations = {
+        "tang dynasty": "唐朝", "song dynasty": "北宋", "edo": "江户",
+        "mesopotamia": "两河流域", "egypt": "埃及", "pompeii": "庞贝",
+        "london": "伦敦", "utah": "犹他", "china": "中国", "japan": "日本",
+        "tang": "唐朝", "again": "再来",
+    }
+    for english, chinese in translations.items():
+        query = re.sub(r"\b" + re.escape(english) + r"\b", chinese, query)
     if query == "再来":
         query = ""
     candidates = tuple(item for item in _JOURNEYS if not query or _matches(item, query))

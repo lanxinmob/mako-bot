@@ -25,7 +25,9 @@ class RelationshipService:
         found = fact(text)
         if not found or not incoming.source_ref:
             return []
-        if found['memory_type'] == 'preference' and not text.strip().startswith(('我', '以前喜欢')):
+        if (found['memory_type'] == 'preference'
+                and not text.strip().startswith(('我', '以前喜欢'))
+                and not re.match(r'I\s+', text.strip(), re.I)):
             return []
         due = self._parse_due_time(text) if found['memory_type'] == 'promise' else None
         return await LedgerService(self.storage).mutate(incoming.address.user_id, 'auto', None,
